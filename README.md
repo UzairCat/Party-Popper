@@ -28,12 +28,13 @@ The Node server serves the built single-page app and exposes `GET /health`. It r
 
 ## Railway
 
-1. Create a Railway service from this GitHub repository.
+1. Create a Railway service from this GitHub repository and deploy the `main` branch.
 2. Leave the root directory at `/`.
-3. Generate a public domain in **Settings → Networking**.
-4. Railway reads `railway.json`, runs `npm run build`, starts with `npm start`, and checks `/health`.
+3. In the service settings, confirm the build command is `npm run build` and the start command is `npm start`.
+4. Set the health-check path to `/health`.
+5. Under **Settings → Networking → Public Networking**, generate a Railway domain.
 
-No database, Redis instance, or custom environment variables are required for the static UI milestone. Persistent multiplayer state will need an external shared store before horizontal scaling is enabled.
+No database, Redis instance, or custom environment variables are required for the static UI milestone. Railway injects `PORT` automatically. Keep the future in-memory multiplayer server at one replica; add Redis before enabling horizontal scaling so every instance can share room and Socket.IO state.
 
 ## Current scope
 
