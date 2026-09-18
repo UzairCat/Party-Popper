@@ -143,10 +143,7 @@ try {
   assert.deepEqual(updatedSettings.data.settings.categories, ['science', 'history'])
   await guestSawSettingsUpdate
 
-  const guestSawQuizStart = waitForEvent(guestSocket, 'quiz:placeholder')
-  const startedQuiz = await emitWithAck(hostSocket, 'quiz:start')
-  assert.equal(startedQuiz.ok, true)
-  await guestSawQuizStart
+  // Lobby smoke checks deliberately do not start generation or spend API credits.
 
   const hostSawDisconnect = waitForEvent(
     hostSocket,

@@ -44,6 +44,38 @@ export interface FourChoiceSetupSnapshot {
   updatedAt: string
 }
 
+export type QuizPhase = 'GENERATING' | 'ERROR' | 'INTRO' | 'QUESTION_INTRO' | 'QUESTION' | 'ANSWER_REVEAL' | 'LEADERBOARD' | 'FINAL_RESULTS'
+
+export interface QuizStanding {
+  playerId: string
+  name: string
+  avatar: import('./protocol.js').PlayerAvatar
+  isConnected: boolean
+  score: number
+  points: number
+  rank: number
+  previousRank: number
+}
+
+/** Public, personalized state. Future questions and their solutions never travel here. */
+export interface QuizSnapshot {
+  matchId: string
+  phase: QuizPhase
+  serverNow: number
+  deadline: number | null
+  questionNumber: number
+  questionCount: number
+  timePerQuestion: number
+  question: { id: string; text: string; answers: string[]; category: FourChoiceCategoryId } | null
+  correctAnswer: number | null
+  ownAnswer: number | null
+  ownPoints: number | null
+  answeredCount: number
+  playerCount: number
+  standings: QuizStanding[]
+  error: string | null
+}
+
 export const DEFAULT_FOUR_CHOICE_SETTINGS: FourChoiceSettings = {
   mode: 'CLASSIC',
   timePerQuestion: 15,

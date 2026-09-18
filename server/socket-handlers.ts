@@ -11,6 +11,8 @@ import {
   type SocketSession,
 } from '../shared/protocol.js'
 import { FourChoiceManager } from './games/four-choice-manager.js'
+import { QuizSessionManager } from './games/quiz-session-manager.js'
+import { OpenAIQuizGenerator } from './games/quiz-generator.js'
 import { RoomError, RoomManager } from './room-manager.js'
 
 type LobbyServer = Server<
@@ -80,6 +82,7 @@ export function registerSocketHandlers(
   io: LobbyServer,
   roomManager: RoomManager,
   fourChoiceManager: FourChoiceManager,
+  quizManager = new QuizSessionManager(new OpenAIQuizGenerator()),
 ) {
   const disconnectTimers = new Map<string, NodeJS.Timeout>()
 
@@ -93,13 +96,27 @@ export function registerSocketHandlers(
     }
   }
 
+  const broadcastQuiz = (code: string) => {
+    if (!quizManager.has(code)) return
+    for (const id of io.sockets.adapter.rooms.get(roomChannel(code)) ?? []) {
+      const target = io.sockets.sockets.get(id)
+      if (target?.data.session) target.emit('quiz:match', quizManager.snapshot(code, target.data.session.playerId))
+    }
+  }
+  quizManager.onChange = broadcastQuiz
+  const quizTimer = setInterval(() => quizManager.tick(), 100)
+  quizTimer.unref()
+
   const broadcastState = (room: RoomSnapshot) => {
+    quizManager.syncPlayers(room)
     io.to(roomChannel(room.code)).emit('room:state', room)
+    broadcastQuiz(room.code)
   }
 
   const emitSelectedGameState = (socket: LobbySocket, room: RoomSnapshot) => {
-    if (room.status === 'GAME_SETUP' && room.selectedGameId === 'FOUR_CHOICE') {
+    if (room.selectedGameId === 'FOUR_CHOICE') {
       socket.emit('quiz:state', fourChoiceManager.ensureSetup(room.code))
+      if (quizManager.has(room.code) && socket.data.session) socket.emit('quiz:match', quizManager.snapshot(room.code, socket.data.session.playerId))
     }
   }
 
@@ -292,6 +309,7 @@ export function registerSocketHandlers(
         }
       } else if (result.roomClosed) {
         fourChoiceManager.removeSetup(session.roomCode)
+        quizManager.remove(session.roomCode)
       }
     })
 
@@ -305,6 +323,7 @@ export function registerSocketHandlers(
       if (!result || !session) return
 
       fourChoiceManager.removeSetup(session.roomCode)
+      quizManager.remove(session.roomCode)
       removeConnectionsFromRoom(result.connectionIds, session.roomCode, {
         type: 'room:closed',
         message: 'The host closed the room.',
@@ -359,7 +378,8 @@ export function registerSocketHandlers(
     socket.on('quiz:settings:update', (payload, acknowledge) => {
       const setup = respond(acknowledge, () => {
         const session = requireSession(socket)
-        roomManager.getSelectedGameAsHost(session, socket.id, 'FOUR_CHOICE')
+        const room = roomManager.getSelectedGameAsHost(session, socket.id, 'FOUR_CHOICE')
+        if (room.status !== 'GAME_SETUP') throw new RoomError('INVALID_GAME_STATE', 'Settings are locked during a match.')
         return fourChoiceManager.updateSettings(session.roomCode, payload?.settings)
       })
       if (!setup) return
@@ -376,11 +396,51 @@ export function registerSocketHandlers(
           socket.id,
           'FOUR_CHOICE',
         )
-        fourChoiceManager.validateStart(currentRoom.code)
-        return currentRoom
+        const setup = fourChoiceManager.validateStart(currentRoom.code)
+        quizManager.start(currentRoom, setup.settings)
+        return roomManager.setGamePlaying(session, socket.id)
       })
 
-      if (room) io.to(roomChannel(room.code)).emit('quiz:placeholder')
+      if (room) broadcastState(room)
+    })
+
+    socket.on('quiz:sync', (acknowledge) => {
+      respond(acknowledge, () => {
+        const session = requireSession(socket)
+        roomManager.getSelectedGame(session, socket.id, 'FOUR_CHOICE')
+        return quizManager.snapshot(session.roomCode, session.playerId)
+      })
+    })
+
+    socket.on('quiz:answer', (payload, acknowledge) => {
+      respond(acknowledge, () => {
+        const session = requireSession(socket)
+        roomManager.getSelectedGame(session, socket.id, 'FOUR_CHOICE')
+        quizManager.answer(session.roomCode, session.playerId, payload?.questionId, payload?.answer)
+        return quizManager.snapshot(session.roomCode, session.playerId)
+      })
+    })
+
+    socket.on('quiz:next', (acknowledge) => {
+      respond(acknowledge, () => {
+        const session = requireSession(socket)
+        roomManager.getSelectedGameAsHost(session, socket.id, 'FOUR_CHOICE')
+        quizManager.next(session.roomCode)
+        return quizManager.snapshot(session.roomCode, session.playerId)
+      })
+    })
+
+    socket.on('quiz:menu', (acknowledge) => {
+      const room = respond(acknowledge, () => {
+        const session = requireSession(socket)
+        roomManager.getSelectedGameAsHost(session, socket.id, 'FOUR_CHOICE')
+        quizManager.returnToSettings(session.roomCode)
+        return roomManager.finishGame(session, socket.id)
+      })
+      if (room) {
+        broadcastState(room)
+        io.to(roomChannel(room.code)).emit('quiz:state', fourChoiceManager.getSetup(room.code))
+      }
     })
 
     socket.on('disconnect', () => {
@@ -405,7 +465,10 @@ export function registerSocketHandlers(
         if (!removal) return
 
         if (!removal.room) {
-          if (removal.roomClosed) fourChoiceManager.removeSetup(session.roomCode)
+          if (removal.roomClosed) {
+            fourChoiceManager.removeSetup(session.roomCode)
+            quizManager.remove(session.roomCode)
+          }
           return
         }
 
@@ -427,6 +490,7 @@ export function registerSocketHandlers(
   const cleanupTimer = setInterval(() => {
     for (const expiredRoom of roomManager.expireInactiveRooms()) {
       fourChoiceManager.removeSetup(expiredRoom.code)
+      quizManager.remove(expiredRoom.code)
       removeConnectionsFromRoom(expiredRoom.connectionIds, expiredRoom.code, {
         type: 'room:closed',
         message: 'This room closed after being inactive for 30 minutes.',
@@ -434,4 +498,10 @@ export function registerSocketHandlers(
     }
   }, 60_000)
   cleanupTimer.unref()
+  return () => {
+    clearInterval(cleanupTimer)
+    clearInterval(quizTimer)
+    for (const timer of disconnectTimers.values()) clearTimeout(timer)
+    disconnectTimers.clear()
+  }
 }

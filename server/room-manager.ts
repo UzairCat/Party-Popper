@@ -140,6 +140,9 @@ export class RoomManager {
     }
 
     const room = this.requireRoom(input.roomCode)
+    if (room.status === 'PLAYING') {
+      throw new RoomError('GAME_STARTED', 'Game in progress. Wait for the next match.')
+    }
     const identity = this.validateIdentity(input)
 
     if (room.players.size >= room.settings.maxPlayers) {
@@ -370,6 +373,7 @@ export class RoomManager {
   ): RoomSnapshot {
     const { room } = this.authorize(session, connectionId)
     this.validateSelectedGame(room, gameId)
+    this.touch(room)
     return this.toSnapshot(room)
   }
 
@@ -380,6 +384,7 @@ export class RoomManager {
   ): RoomSnapshot {
     const { room } = this.authorizeHost(session, connectionId)
     this.validateSelectedGame(room, gameId)
+    this.touch(room)
     return this.toSnapshot(room)
   }
 
@@ -398,6 +403,22 @@ export class RoomManager {
       throw new RoomError('MIN_PLAYERS', 'At least two connected players are needed to start.')
     }
 
+    this.touch(room)
+    return this.toSnapshot(room)
+  }
+
+  setGamePlaying(session: SocketSession, connectionId: string): RoomSnapshot {
+    const { room } = this.authorizeHost(session, connectionId)
+    this.validateSelectedGame(room, 'FOUR_CHOICE')
+    room.status = 'PLAYING'
+    this.touch(room)
+    return this.toSnapshot(room)
+  }
+
+  finishGame(session: SocketSession, connectionId: string): RoomSnapshot {
+    const { room } = this.authorizeHost(session, connectionId)
+    this.validateSelectedGame(room, 'FOUR_CHOICE')
+    room.status = 'GAME_SETUP'
     this.touch(room)
     return this.toSnapshot(room)
   }
@@ -502,7 +523,7 @@ export class RoomManager {
   }
 
   private validateSelectedGame(room: StoredRoom, gameId: GameId) {
-    if (room.status !== 'GAME_SETUP' || room.selectedGameId !== gameId) {
+    if (!['GAME_SETUP', 'PLAYING'].includes(room.status) || room.selectedGameId !== gameId) {
       throw new RoomError('INVALID_GAME_STATE', 'That game is not currently being configured.')
     }
   }

@@ -8,6 +8,7 @@ import { RoomCodeCard } from '../components/room/RoomCodeCard'
 import { SettingsPanel } from '../components/room/SettingsPanel'
 import { GameSelectionScreen } from '../games/GameSelectionScreen'
 import { FourChoiceMenu } from '../games/four-choice/FourChoiceMenu'
+import { QuizGame } from '../games/four-choice/QuizGame'
 import {
   closeRoom as closeRoomOnServer,
   disconnectSocket,
@@ -63,7 +64,6 @@ export function LobbyPage() {
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false)
   const [closeDialogOpen, setCloseDialogOpen] = useState(false)
   const [fourChoiceSetup, setFourChoiceSetup] = useState<FourChoiceSetupSnapshot | null>(null)
-  const [quizPreviewOpen, setQuizPreviewOpen] = useState(false)
   const [actionPending, setActionPending] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
 
@@ -132,7 +132,6 @@ export function LobbyPage() {
     const handleKicked = ({ message }: { message: string }) => endSession(message)
     const handleSessionEnded = ({ message }: { message: string }) => endSession(message)
     const handleQuizState = (setup: FourChoiceSetupSnapshot) => setFourChoiceSetup(setup)
-    const handleQuizPlaceholder = () => setQuizPreviewOpen(true)
 
     socket.on('connect', handleConnect)
     socket.on('disconnect', handleDisconnect)
@@ -142,7 +141,6 @@ export function LobbyPage() {
     socket.on('player:kicked', handleKicked)
     socket.on('session:ended', handleSessionEnded)
     socket.on('quiz:state', handleQuizState)
-    socket.on('quiz:placeholder', handleQuizPlaceholder)
 
     if (socket.connected) {
       void restoreSession()
@@ -167,7 +165,6 @@ export function LobbyPage() {
       socket.off('player:kicked', handleKicked)
       socket.off('session:ended', handleSessionEnded)
       socket.off('quiz:state', handleQuizState)
-      socket.off('quiz:placeholder', handleQuizPlaceholder)
       disconnectSocket()
     }
   }, [notify, roomCode, session])
@@ -435,19 +432,9 @@ export function LobbyPage() {
     />
   ) : null
 
-  const quizPreviewDialog = quizPreviewOpen ? (
-    <Modal
-      title="Four Choice setup is working"
-      description="The whole room is synchronized and the match passed its start checks. Question gameplay is the next development stage, using temporary hand-written questions before AI is connected."
-      onClose={() => setQuizPreviewOpen(false)}
-    >
-      <div className="coming-soon-card">
-        <span aria-hidden="true">✓</span>
-        <strong>Stage 1 complete</strong>
-        <small>Ready for static quiz gameplay</small>
-      </div>
-    </Modal>
-  ) : null
+  if (room.status === 'PLAYING' && room.selectedGameId === 'FOUR_CHOICE') {
+    return <><QuizGame room={room} playerId={currentPlayer.id} onLeave={() => setLeaveDialogOpen(true)} />{leaveDialog}{toast ? <Toast message={toast} /> : null}</>
+  }
 
   if (room.status === 'GAME_SELECT') {
     return (
@@ -493,7 +480,6 @@ export function LobbyPage() {
           onLeave={() => setLeaveDialogOpen(true)}
         />
         {leaveDialog}
-        {quizPreviewDialog}
         {toast ? <Toast message={toast} /> : null}
       </>
     )
@@ -664,7 +650,6 @@ export function LobbyPage() {
         />
       ) : null}
 
-      {quizPreviewDialog}
 
       {toast ? <Toast message={toast} /> : null}
     </section>

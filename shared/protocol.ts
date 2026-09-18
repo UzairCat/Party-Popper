@@ -1,4 +1,4 @@
-import type { FourChoiceSettings, FourChoiceSetupSnapshot } from './four-choice.js'
+import type { FourChoiceSettings, FourChoiceSetupSnapshot, QuizSnapshot } from './four-choice.js'
 import type { GameId } from './games.js'
 
 export const ROOM_CODE_LENGTH = 4
@@ -33,7 +33,7 @@ export const PLAYER_AVATAR_IDS = [
 
 export type PlayerColour = (typeof PLAYER_COLOUR_IDS)[number]
 export type PlayerAvatar = (typeof PLAYER_AVATAR_IDS)[number]
-export type RoomStatus = 'WAITING' | 'GAME_SELECT' | 'GAME_SETUP' | 'CLOSED'
+export type RoomStatus = 'WAITING' | 'GAME_SELECT' | 'GAME_SETUP' | 'PLAYING' | 'CLOSED'
 
 export interface Player {
   id: string
@@ -180,6 +180,10 @@ export interface ClientToServerEvents {
   'quiz:start': (
     acknowledge: (response: AckResponse<RoomSnapshot>) => void,
   ) => void
+  'quiz:sync': (acknowledge: (response: AckResponse<QuizSnapshot>) => void) => void
+  'quiz:answer': (payload: { questionId: string; answer: number }, acknowledge: (response: AckResponse<QuizSnapshot>) => void) => void
+  'quiz:next': (acknowledge: (response: AckResponse<QuizSnapshot>) => void) => void
+  'quiz:menu': (acknowledge: (response: AckResponse<RoomSnapshot>) => void) => void
 }
 
 export interface ServerToClientEvents {
@@ -189,7 +193,7 @@ export interface ServerToClientEvents {
   'player:kicked': (notice: RoomNotice) => void
   'session:ended': (notice: RoomNotice) => void
   'quiz:state': (setup: FourChoiceSetupSnapshot) => void
-  'quiz:placeholder': () => void
+  'quiz:match': (state: QuizSnapshot) => void
 }
 
 export type InterServerEvents = Record<string, never>
