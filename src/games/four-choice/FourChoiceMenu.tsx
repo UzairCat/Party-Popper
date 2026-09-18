@@ -14,7 +14,8 @@ import {
   type FourChoiceSetupSnapshot,
 } from '../../../shared/four-choice'
 import { Button } from '../../components/common/Button'
-import { getAvatarEmoji, getColourHex } from '../../data/playerOptions'
+import { getColourHex } from '../../data/playerOptions'
+import { AvatarArt } from '../../components/player/AvatarArt'
 import type { RoomSnapshot } from '../../types/room'
 import { CategorySelector } from './CategorySelector'
 
@@ -133,7 +134,7 @@ export function FourChoiceMenu({
                 className={!player.isConnected ? 'is-away' : ''}
                 style={{ '--player-colour': getColourHex(player.colour) } as CSSProperties}
               >
-                {getAvatarEmoji(player.avatar)}
+                <AvatarArt avatar={player.avatar} />
               </span>
             ))}
           </div>

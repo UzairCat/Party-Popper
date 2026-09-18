@@ -1,16 +1,18 @@
 import { Link } from 'react-router-dom'
+import { PartyArtwork } from '../components/layout/PartyArtwork'
 
 export function HomePage() {
   return (
-    <section className="home-page page-enter">
+    <div className="home-experience page-enter">
+    <section className="home-page">
       <div className="home-hero">
-        <p className="eyebrow eyebrow--accent">Your game night starts here</p>
+        <p className="eyebrow eyebrow--accent home-kicker"><span aria-hidden="true">✳</span> THE GROUP CHAT HAS PLANS.</p>
         <h1>
           Party games.
           <span>One room.</span>
         </h1>
         <p className="home-hero__copy">
-          Create a room, invite your friends, and jump into quick multiplayer games together.
+          Your people. A little friendly competition. A whole lot of “one more round.” Let’s get everyone in.
         </p>
 
         <div className="home-actions">
@@ -41,27 +43,21 @@ export function HomePage() {
         </div>
 
         <div className="trust-row" aria-label="Party Popper benefits">
-          <span>✓ No account</span>
-          <span>✓ Phone friendly</span>
-          <span>✓ Made for groups</span>
+          <span>↗ No downloads</span>
+          <span>◎ No account</span>
+          <span>✦ Just your friends</span>
         </div>
       </div>
 
-      <div className="home-preview" aria-hidden="true">
-        <div className="preview-card preview-card--back">
-          <span>🐸</span>
-        </div>
-        <div className="preview-card preview-card--middle">
-          <span>😎</span>
-        </div>
-        <div className="preview-card preview-card--front">
-          <span className="preview-card__crown">♛</span>
-          <span className="preview-card__avatar">🤖</span>
-          <strong>Everyone’s in!</strong>
-          <small>Room J7KQ</small>
-          <div className="preview-ready">3 players ready</div>
-        </div>
-      </div>
+      <PartyArtwork />
     </section>
+    <div className="party-ribbon" aria-hidden="true"><span>LESS SCROLLING</span> ✳ <span>MORE PLAYING</span> ✳ <span>GOOD COMPANY</span> ✳ <span>GREAT RIVALRIES</span> ✳</div>
+    <section className="how-to-party" aria-labelledby="how-title">
+      <div><p className="eyebrow">NO MANUAL REQUIRED</p><h2 id="how-title">Three steps.<br />Endless banter.</h2></div>
+      <article><span>01 /</span><h3>Make some room.</h3><p>Start a party and claim your spot. No sign-ups, no fuss.</p></article>
+      <article><span>02 /</span><h3>Send the code.</h3><p>Friends join from their own phones. Same room, wherever you are.</p></article>
+      <article><span>03 /</span><h3>Pick your game.</h3><p>Set the rules together. Then let the friendly competition begin.</p></article>
+    </section>
+    </div>
   )
 }

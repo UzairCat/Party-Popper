@@ -2,7 +2,8 @@ import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '../components/common/Button'
 import { IdentityPicker } from '../components/player/IdentityPicker'
-import { getAvatarEmoji, getColourHex } from '../data/playerOptions'
+import { getColourHex } from '../data/playerOptions'
+import { AvatarArt } from '../components/player/AvatarArt'
 import { createRoom } from '../lib/socket'
 import { saveSession } from '../lib/session'
 import { validateDisplayName } from '../lib/validation'
@@ -116,7 +117,7 @@ export function CreateRoomPage() {
             style={{ backgroundColor: getColourHex(colour) }}
             aria-hidden="true"
           >
-            {getAvatarEmoji(avatar)}
+            <AvatarArt avatar={avatar} />
           </div>
           <strong>{name.trim() || 'Your name'}</strong>
           <span>♛ Host</span>

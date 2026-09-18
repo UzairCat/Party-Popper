@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react'
 import { PLAYER_AVATARS, PLAYER_COLOURS } from '../../data/playerOptions'
 import type { PlayerAvatar, PlayerColour } from '../../types/room'
+import { AvatarArt } from './AvatarArt'
 
 interface IdentityPickerProps {
   avatar: PlayerAvatar
@@ -29,7 +30,7 @@ export function IdentityPicker({
               aria-pressed={avatar === option.id}
               onClick={() => onAvatarChange(option.id)}
             >
-              {option.emoji}
+              <AvatarArt avatar={option.id} />
             </button>
           ))}
         </div>

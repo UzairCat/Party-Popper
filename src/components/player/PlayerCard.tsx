@@ -1,5 +1,6 @@
 import { useState, type CSSProperties } from 'react'
-import { getAvatarEmoji, getColourHex } from '../../data/playerOptions'
+import { getColourHex } from '../../data/playerOptions'
+import { AvatarArt } from './AvatarArt'
 import type { Player } from '../../types/room'
 
 interface PlayerCardProps {
@@ -29,7 +30,7 @@ export function PlayerCard({
     >
       <div className="player-card__topline">
         <span className="player-card__avatar" aria-hidden="true">
-          {getAvatarEmoji(player.avatar)}
+          <AvatarArt avatar={player.avatar} />
         </span>
         {canManage && !isCurrentPlayer ? (
           <div className="player-menu">

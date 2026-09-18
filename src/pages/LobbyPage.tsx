@@ -523,7 +523,7 @@ export function LobbyPage() {
                 : 'Connecting…'}
           </div>
           <h1>Party lobby</h1>
-          <p className="prototype-label">Live room · server synchronized</p>
+          <p className="prototype-label">Good company. A little competition.</p>
         </div>
         <div className="lobby-toolbar__actions">
           {isCurrentPlayerHost ? (

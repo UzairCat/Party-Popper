@@ -6,7 +6,7 @@ function Brand({ inRoom }: { inRoom: boolean }) {
       <span className="brand__mark" aria-hidden="true">
         <span>!</span>
       </span>
-      <span>Party Popper</span>
+      <span>party<span className="brand__second">popper</span><sup>✳</sup></span>
     </>
   )
 
@@ -45,11 +45,13 @@ export function AppShell() {
       <AmbientBackground />
       <header className="site-header">
         <Brand inRoom={inRoom} />
-        <span className="site-header__tag">No account needed</span>
+        <div className="header-note"><span aria-hidden="true">●</span> GOOD FRIENDS. GREAT GAMES.</div>
+        <span className="site-header__tag">✦ Instant game night</span>
       </header>
       <main id="main-content" className="page-shell">
         <Outlet />
       </main>
+      <footer className="site-footer"><span>SMALL SCREENS. BIG ENERGY.</span><span>Made for your favourite people <span aria-hidden="true">✳</span></span></footer>
     </div>
   )
 }
