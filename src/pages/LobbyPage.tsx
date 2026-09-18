@@ -6,22 +6,32 @@ import { Toast } from '../components/common/Toast'
 import { PlayerCard } from '../components/player/PlayerCard'
 import { RoomCodeCard } from '../components/room/RoomCodeCard'
 import { SettingsPanel } from '../components/room/SettingsPanel'
+import { GameSelectionScreen } from '../games/GameSelectionScreen'
+import { FourChoiceMenu } from '../games/four-choice/FourChoiceMenu'
 import {
   closeRoom as closeRoomOnServer,
   disconnectSocket,
   ensureSocketConnected,
+  getFourChoiceSettings,
   kickPlayer,
   leaveRoom as leaveRoomOnServer,
+  openGameSelection,
   reconnectRoom,
+  returnToGameSelection,
+  returnToLobby,
+  selectGame,
   socket,
-  startGame,
+  startFourChoice,
   transferHost,
+  updateFourChoiceSettings,
   updateReady,
   updateRoomSettings,
 } from '../lib/socket'
 import { clearSession, loadSession } from '../lib/session'
 import { normaliseRoomCode, ROOM_CODE_LENGTH } from '../lib/validation'
 import type { Player, RoomSettings, RoomSnapshot, SessionCredentials } from '../types/room'
+import type { FourChoiceSettings, FourChoiceSetupSnapshot } from '../../shared/four-choice'
+import type { GameId } from '../../shared/games'
 
 type PlayerAction = 'kick' | 'transfer'
 type ConnectionState = 'connecting' | 'connected' | 'reconnecting'
@@ -52,7 +62,8 @@ export function LobbyPage() {
   const [pendingPlayerAction, setPendingPlayerAction] = useState<PendingPlayerAction | null>(null)
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false)
   const [closeDialogOpen, setCloseDialogOpen] = useState(false)
-  const [gameDialogOpen, setGameDialogOpen] = useState(false)
+  const [fourChoiceSetup, setFourChoiceSetup] = useState<FourChoiceSetupSnapshot | null>(null)
+  const [quizPreviewOpen, setQuizPreviewOpen] = useState(false)
   const [actionPending, setActionPending] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
 
@@ -72,6 +83,7 @@ export function LobbyPage() {
       clearSession()
       setSession(null)
       setRoom(null)
+      setFourChoiceSetup(null)
       setSettingsOpen(false)
       setPageError(message)
       disconnectSocket()
@@ -109,12 +121,18 @@ export function LobbyPage() {
       void restoreSession()
     }
     const handleDisconnect = () => setConnectionState('reconnecting')
-    const handleRoomState = (nextRoom: RoomSnapshot) => setRoom(nextRoom)
+    const handleRoomState = (nextRoom: RoomSnapshot) => {
+      setRoom(nextRoom)
+      if (nextRoom.status !== 'GAME_SETUP' || nextRoom.selectedGameId !== 'FOUR_CHOICE') {
+        setFourChoiceSetup(null)
+      }
+    }
     const handleNotice = ({ message }: { message: string }) => notify(message)
     const handleRoomClosed = ({ message }: { message: string }) => endSession(message)
     const handleKicked = ({ message }: { message: string }) => endSession(message)
     const handleSessionEnded = ({ message }: { message: string }) => endSession(message)
-    const handleGamePlaceholder = () => setGameDialogOpen(true)
+    const handleQuizState = (setup: FourChoiceSetupSnapshot) => setFourChoiceSetup(setup)
+    const handleQuizPlaceholder = () => setQuizPreviewOpen(true)
 
     socket.on('connect', handleConnect)
     socket.on('disconnect', handleDisconnect)
@@ -123,7 +141,8 @@ export function LobbyPage() {
     socket.on('room:closed', handleRoomClosed)
     socket.on('player:kicked', handleKicked)
     socket.on('session:ended', handleSessionEnded)
-    socket.on('game:placeholder', handleGamePlaceholder)
+    socket.on('quiz:state', handleQuizState)
+    socket.on('quiz:placeholder', handleQuizPlaceholder)
 
     if (socket.connected) {
       void restoreSession()
@@ -147,10 +166,36 @@ export function LobbyPage() {
       socket.off('room:closed', handleRoomClosed)
       socket.off('player:kicked', handleKicked)
       socket.off('session:ended', handleSessionEnded)
-      socket.off('game:placeholder', handleGamePlaceholder)
+      socket.off('quiz:state', handleQuizState)
+      socket.off('quiz:placeholder', handleQuizPlaceholder)
       disconnectSocket()
     }
   }, [notify, roomCode, session])
+
+  useEffect(() => {
+    if (
+      room?.status !== 'GAME_SETUP' ||
+      room.selectedGameId !== 'FOUR_CHOICE' ||
+      fourChoiceSetup ||
+      !socket.connected
+    ) {
+      return
+    }
+
+    let cancelled = false
+    void getFourChoiceSettings().then((response) => {
+      if (cancelled) return
+      if (response.ok) {
+        setFourChoiceSetup(response.data)
+      } else {
+        notify(response.error.message)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [fourChoiceSetup, notify, room])
 
   const currentPlayerId = session?.playerId
   const currentPlayer = room?.players.find((player) => player.id === currentPlayerId)
@@ -273,9 +318,70 @@ export function LobbyPage() {
     })
   }
 
-  const handleStart = () => {
+  const handleOpenGameSelection = () => {
     void runAction(async () => {
-      const response = await startGame()
+      const response = await openGameSelection()
+      if (!response.ok) {
+        notify(response.error.message)
+        return
+      }
+
+      setRoom(response.data)
+    })
+  }
+
+  const handleSelectGame = (gameId: GameId) => {
+    void runAction(async () => {
+      const response = await selectGame(gameId)
+      if (!response.ok) {
+        notify(response.error.message)
+        return
+      }
+
+      setRoom(response.data)
+    })
+  }
+
+  const handleBackToGames = () => {
+    void runAction(async () => {
+      const response = await returnToGameSelection()
+      if (!response.ok) {
+        notify(response.error.message)
+        return
+      }
+
+      setRoom(response.data)
+      setFourChoiceSetup(null)
+    })
+  }
+
+  const handleBackToLobby = () => {
+    void runAction(async () => {
+      const response = await returnToLobby()
+      if (!response.ok) {
+        notify(response.error.message)
+        return
+      }
+
+      setRoom(response.data)
+    })
+  }
+
+  const handleFourChoiceSettings = (settings: FourChoiceSettings) => {
+    void runAction(async () => {
+      const response = await updateFourChoiceSettings(settings)
+      if (!response.ok) {
+        notify(response.error.message)
+        return
+      }
+
+      setFourChoiceSetup(response.data)
+    })
+  }
+
+  const handleFourChoiceStart = () => {
+    void runAction(async () => {
+      const response = await startFourChoice()
       if (!response.ok) notify(response.error.message)
     })
   }
@@ -311,6 +417,85 @@ export function LobbyPage() {
           <p>Restoring your player session.</p>
         </div>
       </section>
+    )
+  }
+
+  const leaveDialog = leaveDialogOpen ? (
+    <Modal
+      title="Leave this room?"
+      description={
+        isCurrentPlayerHost
+          ? 'You’re the host. Host control will transfer to another player.'
+          : 'You can rejoin later with the same room code.'
+      }
+      confirmLabel="Leave room"
+      confirmVariant="danger"
+      onConfirm={confirmLeave}
+      onClose={() => setLeaveDialogOpen(false)}
+    />
+  ) : null
+
+  const quizPreviewDialog = quizPreviewOpen ? (
+    <Modal
+      title="Four Choice setup is working"
+      description="The whole room is synchronized and the match passed its start checks. Question gameplay is the next development stage, using temporary hand-written questions before AI is connected."
+      onClose={() => setQuizPreviewOpen(false)}
+    >
+      <div className="coming-soon-card">
+        <span aria-hidden="true">✓</span>
+        <strong>Stage 1 complete</strong>
+        <small>Ready for static quiz gameplay</small>
+      </div>
+    </Modal>
+  ) : null
+
+  if (room.status === 'GAME_SELECT') {
+    return (
+      <>
+        <GameSelectionScreen
+          room={room}
+          currentPlayerId={currentPlayer.id}
+          isPending={actionPending}
+          onSelect={handleSelectGame}
+          onBackToLobby={handleBackToLobby}
+          onLeave={() => setLeaveDialogOpen(true)}
+        />
+        {leaveDialog}
+        {toast ? <Toast message={toast} /> : null}
+      </>
+    )
+  }
+
+  if (room.status === 'GAME_SETUP' && room.selectedGameId === 'FOUR_CHOICE') {
+    if (!fourChoiceSetup) {
+      return (
+        <section className="lobby-page page-enter">
+          <div className="lobby-message-card" role="status">
+            <span className="large-loader" aria-hidden="true" />
+            <p className="eyebrow eyebrow--accent">Four Choice</p>
+            <h1>Loading game settings…</h1>
+            <p>Synchronizing the host’s setup with this device.</p>
+          </div>
+        </section>
+      )
+    }
+
+    return (
+      <>
+        <FourChoiceMenu
+          room={room}
+          currentPlayerId={currentPlayer.id}
+          setup={fourChoiceSetup}
+          isPending={actionPending}
+          onSettingsChange={handleFourChoiceSettings}
+          onBackToGames={handleBackToGames}
+          onStart={handleFourChoiceStart}
+          onLeave={() => setLeaveDialogOpen(true)}
+        />
+        {leaveDialog}
+        {quizPreviewDialog}
+        {toast ? <Toast message={toast} /> : null}
+      </>
     )
   }
 
@@ -418,9 +603,9 @@ export function LobbyPage() {
             size="large"
             disabled={!canStart || actionPending}
             title={!canStart ? 'At least two connected players must be ready.' : undefined}
-            onClick={handleStart}
+            onClick={handleOpenGameSelection}
           >
-            Start game <span aria-hidden="true">→</span>
+            Choose game <span aria-hidden="true">→</span>
           </Button>
         ) : (
           <Button
@@ -466,20 +651,7 @@ export function LobbyPage() {
         />
       ) : null}
 
-      {leaveDialogOpen ? (
-        <Modal
-          title="Leave this room?"
-          description={
-            isCurrentPlayerHost
-              ? 'You’re the host. Host control will transfer to another player.'
-              : 'You can rejoin later with the same room code.'
-          }
-          confirmLabel="Leave room"
-          confirmVariant="danger"
-          onConfirm={confirmLeave}
-          onClose={() => setLeaveDialogOpen(false)}
-        />
-      ) : null}
+      {leaveDialog}
 
       {closeDialogOpen ? (
         <Modal
@@ -492,19 +664,7 @@ export function LobbyPage() {
         />
       ) : null}
 
-      {gameDialogOpen ? (
-        <Modal
-          title="Games are coming next!"
-          description="The multiplayer lobby is live. Game selection and the first minigame belong to the next phase."
-          onClose={() => setGameDialogOpen(false)}
-        >
-          <div className="coming-soon-card">
-            <span aria-hidden="true">🎉</span>
-            <strong>Game select</strong>
-            <small>Coming in Phase 2</small>
-          </div>
-        </Modal>
-      ) : null}
+      {quizPreviewDialog}
 
       {toast ? <Toast message={toast} /> : null}
     </section>

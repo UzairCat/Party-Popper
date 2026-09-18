@@ -10,6 +10,7 @@ import {
   type SocketData,
   type SocketSession,
 } from '../shared/protocol.js'
+import { FourChoiceManager } from './games/four-choice-manager.js'
 import { RoomError, RoomManager } from './room-manager.js'
 
 type LobbyServer = Server<
@@ -75,7 +76,11 @@ function requireSession(socket: LobbySocket): SocketSession {
   return socket.data.session
 }
 
-export function registerSocketHandlers(io: LobbyServer, roomManager: RoomManager) {
+export function registerSocketHandlers(
+  io: LobbyServer,
+  roomManager: RoomManager,
+  fourChoiceManager: FourChoiceManager,
+) {
   const disconnectTimers = new Map<string, NodeJS.Timeout>()
 
   const clearDisconnectTimer = (session: SocketSession) => {
@@ -90,6 +95,12 @@ export function registerSocketHandlers(io: LobbyServer, roomManager: RoomManager
 
   const broadcastState = (room: RoomSnapshot) => {
     io.to(roomChannel(room.code)).emit('room:state', room)
+  }
+
+  const emitSelectedGameState = (socket: LobbySocket, room: RoomSnapshot) => {
+    if (room.status === 'GAME_SETUP' && room.selectedGameId === 'FOUR_CHOICE') {
+      socket.emit('quiz:state', fourChoiceManager.ensureSetup(room.code))
+    }
   }
 
   const removeConnectionsFromRoom = (
@@ -153,6 +164,7 @@ export function registerSocketHandlers(io: LobbyServer, roomManager: RoomManager
       }
       await socket.join(roomChannel(result.room.code))
       broadcastState(result.room)
+      emitSelectedGameState(socket, result.room)
       socket.to(roomChannel(result.room.code)).emit('room:notice', {
         message: `${payload.name.trim()} joined the room!`,
       })
@@ -182,6 +194,7 @@ export function registerSocketHandlers(io: LobbyServer, roomManager: RoomManager
       clearDisconnectTimer(socket.data.session)
       await socket.join(roomChannel(room.code))
       broadcastState(room)
+      emitSelectedGameState(socket, room)
 
       if (!wasAlreadyBound) {
         const player = room.players.find((candidate) => candidate.id === payload.playerId)
@@ -277,6 +290,8 @@ export function registerSocketHandlers(io: LobbyServer, roomManager: RoomManager
             message: `${result.newHostName} is now the host.`,
           })
         }
+      } else if (result.roomClosed) {
+        fourChoiceManager.removeSetup(session.roomCode)
       }
     })
 
@@ -289,19 +304,83 @@ export function registerSocketHandlers(io: LobbyServer, roomManager: RoomManager
       )
       if (!result || !session) return
 
+      fourChoiceManager.removeSetup(session.roomCode)
       removeConnectionsFromRoom(result.connectionIds, session.roomCode, {
         type: 'room:closed',
         message: 'The host closed the room.',
       })
     })
 
-    socket.on('game:start', (acknowledge) => {
+    socket.on('games:open', (acknowledge) => {
       const room = respond(acknowledge, () =>
-        roomManager.startGame(requireSession(socket), socket.id),
+        roomManager.openGameSelection(requireSession(socket), socket.id),
       )
-      if (room) {
-        io.to(roomChannel(room.code)).emit('game:placeholder')
-      }
+      if (room) broadcastState(room)
+    })
+
+    socket.on('game:select', (payload, acknowledge) => {
+      const room = respond(acknowledge, () =>
+        roomManager.selectGame(requireSession(socket), socket.id, payload?.gameId),
+      )
+      if (!room) return
+
+      const setup = fourChoiceManager.ensureSetup(room.code)
+      broadcastState(room)
+      io.to(roomChannel(room.code)).emit('quiz:state', setup)
+      io.to(roomChannel(room.code)).emit('room:notice', {
+        message: 'Four Choice was selected.',
+      })
+    })
+
+    socket.on('game:back', (acknowledge) => {
+      const room = respond(acknowledge, () =>
+        roomManager.returnToGameSelection(requireSession(socket), socket.id),
+      )
+      if (room) broadcastState(room)
+    })
+
+    socket.on('game:return-to-lobby', (acknowledge) => {
+      const room = respond(acknowledge, () =>
+        roomManager.returnToLobby(requireSession(socket), socket.id),
+      )
+      if (room) broadcastState(room)
+    })
+
+    socket.on('quiz:settings:get', (acknowledge) => {
+      const setup = respond(acknowledge, () => {
+        const session = requireSession(socket)
+        roomManager.getSelectedGame(session, socket.id, 'FOUR_CHOICE')
+        return fourChoiceManager.getSetup(session.roomCode)
+      })
+
+      if (setup) socket.emit('quiz:state', setup)
+    })
+
+    socket.on('quiz:settings:update', (payload, acknowledge) => {
+      const setup = respond(acknowledge, () => {
+        const session = requireSession(socket)
+        roomManager.getSelectedGameAsHost(session, socket.id, 'FOUR_CHOICE')
+        return fourChoiceManager.updateSettings(session.roomCode, payload?.settings)
+      })
+      if (!setup) return
+
+      const session = requireSession(socket)
+      io.to(roomChannel(session.roomCode)).emit('quiz:state', setup)
+    })
+
+    socket.on('quiz:start', (acknowledge) => {
+      const room = respond(acknowledge, () => {
+        const session = requireSession(socket)
+        const currentRoom = roomManager.startSelectedGame(
+          session,
+          socket.id,
+          'FOUR_CHOICE',
+        )
+        fourChoiceManager.validateStart(currentRoom.code)
+        return currentRoom
+      })
+
+      if (room) io.to(roomChannel(room.code)).emit('quiz:placeholder')
     })
 
     socket.on('disconnect', () => {
@@ -323,7 +402,12 @@ export function registerSocketHandlers(io: LobbyServer, roomManager: RoomManager
           session.roomCode,
           session.playerId,
         )
-        if (!removal?.room) return
+        if (!removal) return
+
+        if (!removal.room) {
+          if (removal.roomClosed) fourChoiceManager.removeSetup(session.roomCode)
+          return
+        }
 
         broadcastState(removal.room)
         io.to(roomChannel(session.roomCode)).emit('room:notice', {
@@ -342,6 +426,7 @@ export function registerSocketHandlers(io: LobbyServer, roomManager: RoomManager
 
   const cleanupTimer = setInterval(() => {
     for (const expiredRoom of roomManager.expireInactiveRooms()) {
+      fourChoiceManager.removeSetup(expiredRoom.code)
       removeConnectionsFromRoom(expiredRoom.connectionIds, expiredRoom.code, {
         type: 'room:closed',
         message: 'This room closed after being inactive for 30 minutes.',

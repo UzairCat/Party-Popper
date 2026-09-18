@@ -25,7 +25,13 @@ vi.mock('./lib/socket', () => ({
   transferHost: vi.fn(),
   leaveRoom: vi.fn(),
   closeRoom: vi.fn(),
-  startGame: vi.fn(),
+  openGameSelection: vi.fn(),
+  selectGame: vi.fn(),
+  returnToGameSelection: vi.fn(),
+  returnToLobby: vi.fn(),
+  getFourChoiceSettings: vi.fn(),
+  updateFourChoiceSettings: vi.fn(),
+  startFourChoice: vi.fn(),
 }))
 
 function renderRoute(route: string) {

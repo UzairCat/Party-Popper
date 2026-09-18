@@ -1,6 +1,6 @@
 # Party Popper
 
-A browser-based multiplayer party game hub. The current milestone provides real-time room creation, joining, and a server-authoritative lobby that future minigames can reuse.
+A browser-based multiplayer party game hub. The current milestone provides real-time rooms, reusable game selection, and the synchronized setup menu for the first game: Four Choice.
 
 ## Local development
 
@@ -43,11 +43,15 @@ No database, Redis instance, or custom environment variables are required for th
 - Responsive Home, Create, Join, direct-invite, and Lobby routes
 - Unique readable room codes and validated player identities
 - Live Socket.IO player, ready-state, host, and settings synchronization
-- Host-validated kick, transfer-host, close-room, and start-placeholder actions
+- Host-validated kick, transfer-host, close-room, and game-selection actions
+- Synchronized room phases: party lobby, game selection, and game-specific setup
+- Registered Four Choice game card and dedicated Classic-mode menu
+- Host-only time, question-count, difficulty, and category controls
+- Fifteen selectable categories with Select All, Unselect All, and zero-category start protection
 - Private browser session tokens with a 30-second refresh/reconnect grace period
 - Production SPA routing and Railway health check
 
-Actual minigames, scoring, accounts, persistent rooms, and horizontal scaling remain outside this milestone.
+Four Choice question gameplay, scoring, AI generation, accounts, persistent rooms, and horizontal scaling remain outside this milestone. The next development stage is a complete static-question match before connecting any AI provider.
 
 ## Multiplayer smoke test
 
@@ -57,4 +61,4 @@ With the production server running locally, execute:
 npm run verify:multiplayer
 ```
 
-This opens independent Socket.IO clients and verifies create, join, live ready state, disconnect, reconnect, host transfer, and room closing.
+This opens independent Socket.IO clients and verifies create, join, ready state, game selection, host-only settings, cross-client Four Choice synchronization, start validation, disconnect, setup restoration, host transfer, and room closing.

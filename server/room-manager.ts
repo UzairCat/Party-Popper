@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto'
+import { isGameId, type GameId } from '../shared/games.js'
 import {
   DISPLAY_NAME_MAX_LENGTH,
   DISPLAY_NAME_MIN_LENGTH,
@@ -14,6 +15,7 @@ import {
   type RoomErrorCode,
   type RoomSettings,
   type RoomSnapshot,
+  type RoomStatus,
   type RoomSummary,
   type SessionCredentials,
   type SessionResponse,
@@ -29,6 +31,8 @@ interface StoredPlayer extends Player {
 interface StoredRoom {
   id: string
   code: string
+  status: RoomStatus
+  selectedGameId: GameId | null
   hostId: string
   players: Map<string, StoredPlayer>
   settings: RoomSettings
@@ -108,6 +112,8 @@ export class RoomManager {
     const room: StoredRoom = {
       id: this.createId(),
       code,
+      status: 'WAITING',
+      selectedGameId: null,
       hostId: player.id,
       players: new Map([[player.id, player]]),
       settings: {
@@ -189,6 +195,10 @@ export class RoomManager {
   ): RoomSnapshot {
     const { room, player } = this.authorize(session, connectionId)
 
+    if (room.status !== 'WAITING') {
+      throw new RoomError('INVALID_GAME_STATE', 'Ready status can only change in the party lobby.')
+    }
+
     if (player.id === room.hostId) {
       throw new RoomError('INVALID_INPUT', 'The host starts the game instead of readying up.')
     }
@@ -208,6 +218,11 @@ export class RoomManager {
     settings: RoomSettings,
   ): RoomSnapshot {
     const { room } = this.authorizeHost(session, connectionId)
+
+    if (room.status !== 'WAITING') {
+      throw new RoomError('INVALID_GAME_STATE', 'Room settings can only change in the party lobby.')
+    }
+
     const validatedSettings = this.validateSettings(settings)
 
     if (validatedSettings.maxPlayers < room.players.size) {
@@ -287,22 +302,100 @@ export class RoomManager {
     return { connectionIds }
   }
 
-  startGame(session: SocketSession, connectionId: string): RoomSnapshot {
+  openGameSelection(session: SocketSession, connectionId: string): RoomSnapshot {
     const { room } = this.authorizeHost(session, connectionId)
+    this.validateLobbyReady(room)
+
+    room.status = 'GAME_SELECT'
+    room.selectedGameId = null
+    this.touch(room)
+    return this.toSnapshot(room)
+  }
+
+  selectGame(
+    session: SocketSession,
+    connectionId: string,
+    gameId: GameId,
+  ): RoomSnapshot {
+    const { room } = this.authorizeHost(session, connectionId)
+
+    if (room.status !== 'GAME_SELECT') {
+      throw new RoomError('INVALID_GAME_STATE', 'Return to game selection before choosing a game.')
+    }
+
+    if (!isGameId(gameId)) {
+      throw new RoomError('INVALID_INPUT', 'Choose a supported game.')
+    }
+
+    room.status = 'GAME_SETUP'
+    room.selectedGameId = gameId
+    this.touch(room)
+    return this.toSnapshot(room)
+  }
+
+  returnToGameSelection(session: SocketSession, connectionId: string): RoomSnapshot {
+    const { room } = this.authorizeHost(session, connectionId)
+
+    if (room.status !== 'GAME_SETUP') {
+      throw new RoomError('INVALID_GAME_STATE', 'There is no game menu to leave.')
+    }
+
+    room.status = 'GAME_SELECT'
+    room.selectedGameId = null
+    this.touch(room)
+    return this.toSnapshot(room)
+  }
+
+  returnToLobby(session: SocketSession, connectionId: string): RoomSnapshot {
+    const { room } = this.authorizeHost(session, connectionId)
+
+    if (room.status === 'WAITING') {
+      return this.toSnapshot(room)
+    }
+
+    if (room.status !== 'GAME_SELECT' && room.status !== 'GAME_SETUP') {
+      throw new RoomError('INVALID_GAME_STATE', 'The room cannot return to the lobby right now.')
+    }
+
+    room.status = 'WAITING'
+    room.selectedGameId = null
+    this.touch(room)
+    return this.toSnapshot(room)
+  }
+
+  getSelectedGame(
+    session: SocketSession,
+    connectionId: string,
+    gameId: GameId,
+  ): RoomSnapshot {
+    const { room } = this.authorize(session, connectionId)
+    this.validateSelectedGame(room, gameId)
+    return this.toSnapshot(room)
+  }
+
+  getSelectedGameAsHost(
+    session: SocketSession,
+    connectionId: string,
+    gameId: GameId,
+  ): RoomSnapshot {
+    const { room } = this.authorizeHost(session, connectionId)
+    this.validateSelectedGame(room, gameId)
+    return this.toSnapshot(room)
+  }
+
+  startSelectedGame(
+    session: SocketSession,
+    connectionId: string,
+    gameId: GameId,
+  ): RoomSnapshot {
+    const { room } = this.authorizeHost(session, connectionId)
+    this.validateSelectedGame(room, gameId)
     const connectedPlayers = [...room.players.values()].filter(
       (player) => player.isConnected,
     )
 
     if (connectedPlayers.length < 2) {
       throw new RoomError('MIN_PLAYERS', 'At least two connected players are needed to start.')
-    }
-
-    const unreadyPlayers = [...room.players.values()].filter(
-      (player) => player.id !== room.hostId && (!player.isReady || !player.isConnected),
-    )
-
-    if (room.settings.requireReady && unreadyPlayers.length > 0) {
-      throw new RoomError('PLAYERS_NOT_READY', 'Everyone needs to be ready first.')
     }
 
     this.touch(room)
@@ -384,6 +477,34 @@ export class RoomManager {
     }
 
     return authorized
+  }
+
+  private validateLobbyReady(room: StoredRoom) {
+    if (room.status !== 'WAITING') {
+      throw new RoomError('INVALID_GAME_STATE', 'The room has already left the party lobby.')
+    }
+
+    const connectedPlayers = [...room.players.values()].filter(
+      (player) => player.isConnected,
+    )
+
+    if (connectedPlayers.length < 2) {
+      throw new RoomError('MIN_PLAYERS', 'At least two connected players are needed to continue.')
+    }
+
+    const unreadyPlayers = [...room.players.values()].filter(
+      (player) => player.id !== room.hostId && (!player.isReady || !player.isConnected),
+    )
+
+    if (room.settings.requireReady && unreadyPlayers.length > 0) {
+      throw new RoomError('PLAYERS_NOT_READY', 'Everyone needs to be ready first.')
+    }
+  }
+
+  private validateSelectedGame(room: StoredRoom, gameId: GameId) {
+    if (room.status !== 'GAME_SETUP' || room.selectedGameId !== gameId) {
+      throw new RoomError('INVALID_GAME_STATE', 'That game is not currently being configured.')
+    }
   }
 
   private requireRoom(rawCode: unknown) {
@@ -573,7 +694,8 @@ export class RoomManager {
   private toSnapshot(room: StoredRoom): RoomSnapshot {
     return {
       code: room.code,
-      status: 'WAITING',
+      status: room.status,
+      selectedGameId: room.selectedGameId,
       hostId: room.hostId,
       players: [...room.players.values()].map((player) => ({
         id: player.id,

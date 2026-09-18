@@ -1,3 +1,6 @@
+import type { FourChoiceSettings, FourChoiceSetupSnapshot } from './four-choice.js'
+import type { GameId } from './games.js'
+
 export const ROOM_CODE_LENGTH = 4
 export const ROOM_CODE_CHARACTERS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 export const DISPLAY_NAME_MIN_LENGTH = 2
@@ -30,7 +33,7 @@ export const PLAYER_AVATAR_IDS = [
 
 export type PlayerColour = (typeof PLAYER_COLOUR_IDS)[number]
 export type PlayerAvatar = (typeof PLAYER_AVATAR_IDS)[number]
-export type RoomStatus = 'WAITING' | 'CLOSED'
+export type RoomStatus = 'WAITING' | 'GAME_SELECT' | 'GAME_SETUP' | 'CLOSED'
 
 export interface Player {
   id: string
@@ -51,6 +54,7 @@ export interface RoomSettings {
 export interface RoomSnapshot {
   code: string
   status: RoomStatus
+  selectedGameId: GameId | null
   hostId: string
   players: Player[]
   settings: RoomSettings
@@ -96,6 +100,8 @@ export type RoomErrorCode =
   | 'PLAYER_NOT_FOUND'
   | 'MIN_PLAYERS'
   | 'PLAYERS_NOT_READY'
+  | 'INVALID_GAME_STATE'
+  | 'NO_CATEGORIES'
   | 'ALREADY_IN_ROOM'
   | 'INTERNAL_ERROR'
 
@@ -151,7 +157,27 @@ export interface ClientToServerEvents {
   'room:close': (
     acknowledge: (response: AckResponse<{ roomClosed: true }>) => void,
   ) => void
-  'game:start': (
+  'games:open': (
+    acknowledge: (response: AckResponse<RoomSnapshot>) => void,
+  ) => void
+  'game:select': (
+    payload: { gameId: GameId },
+    acknowledge: (response: AckResponse<RoomSnapshot>) => void,
+  ) => void
+  'game:back': (
+    acknowledge: (response: AckResponse<RoomSnapshot>) => void,
+  ) => void
+  'game:return-to-lobby': (
+    acknowledge: (response: AckResponse<RoomSnapshot>) => void,
+  ) => void
+  'quiz:settings:get': (
+    acknowledge: (response: AckResponse<FourChoiceSetupSnapshot>) => void,
+  ) => void
+  'quiz:settings:update': (
+    payload: { settings: FourChoiceSettings },
+    acknowledge: (response: AckResponse<FourChoiceSetupSnapshot>) => void,
+  ) => void
+  'quiz:start': (
     acknowledge: (response: AckResponse<RoomSnapshot>) => void,
   ) => void
 }
@@ -162,7 +188,8 @@ export interface ServerToClientEvents {
   'room:closed': (notice: RoomNotice) => void
   'player:kicked': (notice: RoomNotice) => void
   'session:ended': (notice: RoomNotice) => void
-  'game:placeholder': () => void
+  'quiz:state': (setup: FourChoiceSetupSnapshot) => void
+  'quiz:placeholder': () => void
 }
 
 export type InterServerEvents = Record<string, never>

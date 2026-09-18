@@ -4,5 +4,6 @@ export type {
   PlayerColour,
   RoomSettings,
   RoomSnapshot,
+  RoomStatus,
   SessionCredentials,
 } from '../../shared/protocol'

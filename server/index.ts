@@ -8,6 +8,7 @@ import type {
   ServerToClientEvents,
   SocketData,
 } from '../shared/protocol.js'
+import { FourChoiceManager } from './games/four-choice-manager.js'
 import { RoomManager } from './room-manager.js'
 import { registerSocketHandlers } from './socket-handlers.js'
 
@@ -22,6 +23,7 @@ const io = new Server<
   SocketData
 >(httpServer)
 const roomManager = new RoomManager()
+const fourChoiceManager = new FourChoiceManager()
 
 app.disable('x-powered-by')
 app.use(express.json())
@@ -37,7 +39,7 @@ app.use((_request, response) => {
   response.sendFile(path.join(clientDirectory, 'index.html'))
 })
 
-registerSocketHandlers(io, roomManager)
+registerSocketHandlers(io, roomManager, fourChoiceManager)
 
 httpServer.listen(port, '0.0.0.0', () => {
   console.log(`Party Popper is listening on port ${port}`)

@@ -86,6 +86,68 @@ try {
   assert.equal(ready.ok, true)
   await hostSawReady
 
+  const guestSawGameSelection = waitForEvent(
+    guestSocket,
+    'room:state',
+    (room) => room.status === 'GAME_SELECT',
+  )
+  const openedGames = await emitWithAck(hostSocket, 'games:open')
+  assert.equal(openedGames.ok, true)
+  assert.equal(openedGames.data.status, 'GAME_SELECT')
+  await guestSawGameSelection
+
+  const rejectedGuestSelection = await emitWithAck(guestSocket, 'game:select', {
+    gameId: 'FOUR_CHOICE',
+  })
+  assert.equal(rejectedGuestSelection.ok, false)
+  assert.equal(rejectedGuestSelection.error.code, 'HOST_ONLY')
+
+  const guestSawGameSetup = waitForEvent(
+    guestSocket,
+    'room:state',
+    (room) => room.status === 'GAME_SETUP' && room.selectedGameId === 'FOUR_CHOICE',
+  )
+  const guestSawQuizSetup = waitForEvent(guestSocket, 'quiz:state')
+  const selectedGame = await emitWithAck(hostSocket, 'game:select', {
+    gameId: 'FOUR_CHOICE',
+  })
+  assert.equal(selectedGame.ok, true)
+  await guestSawGameSetup
+  const defaultQuizSetup = await guestSawQuizSetup
+  assert.equal(defaultQuizSetup.settings.timePerQuestion, 15)
+  assert.equal(defaultQuizSetup.settings.questionCount, 20)
+  assert.equal(defaultQuizSetup.settings.categories.length, 15)
+
+  const rejectedGuestSettings = await emitWithAck(guestSocket, 'quiz:settings:update', {
+    settings: { ...defaultQuizSetup.settings, difficulty: 'hard' },
+  })
+  assert.equal(rejectedGuestSettings.ok, false)
+  assert.equal(rejectedGuestSettings.error.code, 'HOST_ONLY')
+
+  const nextQuizSettings = {
+    ...defaultQuizSetup.settings,
+    timePerQuestion: 20,
+    questionCount: 5,
+    difficulty: 'hard',
+    categories: ['science', 'history'],
+  }
+  const guestSawSettingsUpdate = waitForEvent(
+    guestSocket,
+    'quiz:state',
+    (setup) => setup.settings.timePerQuestion === 20,
+  )
+  const updatedSettings = await emitWithAck(hostSocket, 'quiz:settings:update', {
+    settings: nextQuizSettings,
+  })
+  assert.equal(updatedSettings.ok, true)
+  assert.deepEqual(updatedSettings.data.settings.categories, ['science', 'history'])
+  await guestSawSettingsUpdate
+
+  const guestSawQuizStart = waitForEvent(guestSocket, 'quiz:placeholder')
+  const startedQuiz = await emitWithAck(hostSocket, 'quiz:start')
+  assert.equal(startedQuiz.ok, true)
+  await guestSawQuizStart
+
   const hostSawDisconnect = waitForEvent(
     hostSocket,
     'room:state',
@@ -100,6 +162,11 @@ try {
     'room:state',
     (room) => room.players.find((player) => player.id === guestSession.playerId)?.isConnected,
   )
+  const guestRestoredQuizSetup = waitForEvent(
+    reconnectedGuestSocket,
+    'quiz:state',
+    (setup) => setup.settings.difficulty === 'hard',
+  )
   const reconnected = await emitWithAck(
     reconnectedGuestSocket,
     'room:reconnect',
@@ -108,6 +175,7 @@ try {
   assert.equal(reconnected.ok, true)
   assert.equal(reconnected.data.players.length, 2)
   await hostSawReconnect
+  await guestRestoredQuizSetup
 
   const transferred = await emitWithAck(hostSocket, 'host:transfer', {
     playerId: guestSession.playerId,

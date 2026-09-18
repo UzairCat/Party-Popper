@@ -227,7 +227,7 @@ describe('RoomManager', () => {
     )
   })
 
-  it('requires connected ready players before starting the placeholder', () => {
+  it('requires a ready lobby, synchronizes game selection, and validates quiz start players', () => {
     const { manager } = createHarness()
     const host = manager.createRoom(HOST, 'host-connection')
     const guest = manager.joinRoom(
@@ -236,26 +236,76 @@ describe('RoomManager', () => {
     )
 
     expectRoomError(
-      () => manager.startGame(socketSession(host.session), 'host-connection'),
+      () => manager.openGameSelection(socketSession(host.session), 'host-connection'),
       'PLAYERS_NOT_READY',
     )
     manager.setReady(socketSession(guest.session), 'guest-connection', true)
-    expect(manager.startGame(socketSession(host.session), 'host-connection').players).toHaveLength(2)
+    const selection = manager.openGameSelection(
+      socketSession(host.session),
+      'host-connection',
+    )
+    expect(selection).toMatchObject({ status: 'GAME_SELECT', selectedGameId: null })
+
+    expectRoomError(
+      () =>
+        manager.selectGame(
+          socketSession(guest.session),
+          'guest-connection',
+          'FOUR_CHOICE',
+        ),
+      'HOST_ONLY',
+    )
+
+    const setup = manager.selectGame(
+      socketSession(host.session),
+      'host-connection',
+      'FOUR_CHOICE',
+    )
+    expect(setup).toMatchObject({ status: 'GAME_SETUP', selectedGameId: 'FOUR_CHOICE' })
+    expect(
+      manager.startSelectedGame(
+        socketSession(host.session),
+        'host-connection',
+        'FOUR_CHOICE',
+      ).players,
+    ).toHaveLength(2)
 
     manager.disconnect(socketSession(guest.session), 'guest-connection')
     expectRoomError(
-      () => manager.startGame(socketSession(host.session), 'host-connection'),
+      () =>
+        manager.startSelectedGame(
+          socketSession(host.session),
+          'host-connection',
+          'FOUR_CHOICE',
+        ),
       'MIN_PLAYERS',
+    )
+  })
+
+  it('lets only the host move back through game setup phases', () => {
+    const { manager } = createHarness()
+    const host = manager.createRoom(HOST, 'host-connection')
+    const guest = manager.joinRoom(
+      { ...GUEST, roomCode: host.room.code },
+      'guest-connection',
+    )
+    manager.setReady(socketSession(guest.session), 'guest-connection', true)
+    manager.openGameSelection(socketSession(host.session), 'host-connection')
+    manager.selectGame(socketSession(host.session), 'host-connection', 'FOUR_CHOICE')
+
+    expectRoomError(
+      () => manager.returnToGameSelection(socketSession(guest.session), 'guest-connection'),
+      'HOST_ONLY',
     )
 
-    manager.updateSettings(socketSession(host.session), 'host-connection', {
-      ...host.room.settings,
-      requireReady: false,
-    })
-    expectRoomError(
-      () => manager.startGame(socketSession(host.session), 'host-connection'),
-      'MIN_PLAYERS',
+    const selection = manager.returnToGameSelection(
+      socketSession(host.session),
+      'host-connection',
     )
+    expect(selection).toMatchObject({ status: 'GAME_SELECT', selectedGameId: null })
+
+    const lobby = manager.returnToLobby(socketSession(host.session), 'host-connection')
+    expect(lobby).toMatchObject({ status: 'WAITING', selectedGameId: null })
   })
 
   it('moves host control after grace expiry and deletes an empty room', () => {

@@ -1,4 +1,6 @@
 import { io, type Socket } from 'socket.io-client'
+import type { FourChoiceSettings, FourChoiceSetupSnapshot } from '../../shared/four-choice'
+import type { GameId } from '../../shared/games'
 import type {
   AckResponse,
   ClientToServerEvents,
@@ -140,6 +142,38 @@ export function closeRoom() {
   )
 }
 
-export function startGame() {
-  return waitForAck<RoomSnapshot>((acknowledge) => socket.emit('game:start', acknowledge))
+export function openGameSelection() {
+  return waitForAck<RoomSnapshot>((acknowledge) => socket.emit('games:open', acknowledge))
+}
+
+export function selectGame(gameId: GameId) {
+  return waitForAck<RoomSnapshot>((acknowledge) =>
+    socket.emit('game:select', { gameId }, acknowledge),
+  )
+}
+
+export function returnToGameSelection() {
+  return waitForAck<RoomSnapshot>((acknowledge) => socket.emit('game:back', acknowledge))
+}
+
+export function returnToLobby() {
+  return waitForAck<RoomSnapshot>((acknowledge) =>
+    socket.emit('game:return-to-lobby', acknowledge),
+  )
+}
+
+export function getFourChoiceSettings() {
+  return waitForAck<FourChoiceSetupSnapshot>((acknowledge) =>
+    socket.emit('quiz:settings:get', acknowledge),
+  )
+}
+
+export function updateFourChoiceSettings(settings: FourChoiceSettings) {
+  return waitForAck<FourChoiceSetupSnapshot>((acknowledge) =>
+    socket.emit('quiz:settings:update', { settings }, acknowledge),
+  )
+}
+
+export function startFourChoice() {
+  return waitForAck<RoomSnapshot>((acknowledge) => socket.emit('quiz:start', acknowledge))
 }
