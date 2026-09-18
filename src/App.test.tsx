@@ -1,8 +1,32 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { App } from './App'
+
+vi.mock('./lib/socket', () => ({
+  socket: {
+    connected: false,
+    on: vi.fn(),
+    off: vi.fn(),
+  },
+  ensureSocketConnected: vi.fn(),
+  disconnectSocket: vi.fn(),
+  inspectRoom: vi.fn(async (roomCode: string) => ({
+    ok: true,
+    data: { code: roomCode, playerCount: 1, maxPlayers: 8 },
+  })),
+  createRoom: vi.fn(),
+  joinRoom: vi.fn(),
+  reconnectRoom: vi.fn(),
+  updateReady: vi.fn(),
+  updateRoomSettings: vi.fn(),
+  kickPlayer: vi.fn(),
+  transferHost: vi.fn(),
+  leaveRoom: vi.fn(),
+  closeRoom: vi.fn(),
+  startGame: vi.fn(),
+}))
 
 function renderRoute(route: string) {
   return render(
@@ -30,7 +54,9 @@ describe('Party Popper routes', () => {
     expect(codeInput).toHaveValue('J7KQ')
 
     await user.click(screen.getByRole('button', { name: /continue/i }))
-    expect(screen.getByRole('heading', { name: /pick your player/i })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: /pick your player/i }),
+    ).toBeInTheDocument()
   })
 
   it('validates a host name before entering the lobby', async () => {

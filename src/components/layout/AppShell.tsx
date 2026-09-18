@@ -1,12 +1,22 @@
-import { Link, Outlet } from 'react-router-dom'
+import { Link, Outlet, useLocation } from 'react-router-dom'
 
-function Brand() {
-  return (
-    <Link className="brand" to="/" aria-label="Party Popper home">
+function Brand({ inRoom }: { inRoom: boolean }) {
+  const contents = (
+    <>
       <span className="brand__mark" aria-hidden="true">
         <span>!</span>
       </span>
       <span>Party Popper</span>
+    </>
+  )
+
+  return inRoom ? (
+    <span className="brand" title="Use Leave room before returning home">
+      {contents}
+    </span>
+  ) : (
+    <Link className="brand" to="/" aria-label="Party Popper home">
+      {contents}
     </Link>
   )
 }
@@ -24,6 +34,9 @@ function AmbientBackground() {
 }
 
 export function AppShell() {
+  const location = useLocation()
+  const inRoom = location.pathname.startsWith('/room/')
+
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">
@@ -31,7 +44,7 @@ export function AppShell() {
       </a>
       <AmbientBackground />
       <header className="site-header">
-        <Brand />
+        <Brand inRoom={inRoom} />
         <span className="site-header__tag">No account needed</span>
       </header>
       <main id="main-content" className="page-shell">

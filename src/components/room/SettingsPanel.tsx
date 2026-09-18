@@ -117,7 +117,7 @@ export function SettingsPanel({
           <Button type="button" variant="danger" onClick={onCloseRoom}>
             Close room
           </Button>
-          <p>Changes are local in this layout preview.</p>
+          <p>Changes sync to everyone in the room.</p>
         </div>
       </aside>
     </div>

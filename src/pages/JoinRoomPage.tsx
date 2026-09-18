@@ -2,8 +2,10 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Button } from '../components/common/Button'
 import { IdentityPicker } from '../components/player/IdentityPicker'
+import { inspectRoom, joinRoom } from '../lib/socket'
+import { saveSession } from '../lib/session'
 import { normaliseRoomCode, ROOM_CODE_LENGTH, validateDisplayName } from '../lib/validation'
-import type { LobbyNavigationState, PlayerAvatar, PlayerColour } from '../types/room'
+import type { PlayerAvatar, PlayerColour } from '../types/room'
 
 type JoinStep = 'code' | 'identity'
 
@@ -23,8 +25,9 @@ export function JoinRoomPage() {
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleCodeSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleCodeSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (isSubmitting) return
 
     if (roomCode.length !== ROOM_CODE_LENGTH) {
       setError('Enter the 4-character room code.')
@@ -32,11 +35,33 @@ export function JoinRoomPage() {
     }
 
     setError(null)
-    setStep('identity')
+    setIsSubmitting(true)
+
+    try {
+      const response = await inspectRoom(roomCode)
+
+      if (!response.ok) {
+        setError(response.error.message)
+        return
+      }
+
+      setRoomCode(response.data.code)
+      setStep('identity')
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : 'Could not check that room. Try again.',
+      )
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  const handleJoinSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleJoinSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (isSubmitting) return
+
     const validationError = validateDisplayName(name)
 
     if (validationError) {
@@ -47,16 +72,28 @@ export function JoinRoomPage() {
     setError(null)
     setIsSubmitting(true)
 
-    const state: LobbyNavigationState = {
-      mode: 'guest',
-      name: name.trim(),
-      avatar,
-      colour,
-    }
+    try {
+      const response = await joinRoom({
+        roomCode,
+        name: name.trim(),
+        avatar,
+        colour,
+      })
 
-    window.setTimeout(() => {
-      navigate(`/room/${roomCode}`, { state })
-    }, 350)
+      if (!response.ok) {
+        setError(response.error.message)
+        setIsSubmitting(false)
+        return
+      }
+
+      saveSession(response.data.session)
+      navigate(`/room/${response.data.room.code}`)
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error ? submitError.message : 'Could not join the room. Try again.',
+      )
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -125,7 +162,7 @@ export function JoinRoomPage() {
                 )}
               </div>
 
-              <Button type="submit" size="large">
+              <Button type="submit" size="large" isLoading={isSubmitting}>
                 Continue <span aria-hidden="true">→</span>
               </Button>
             </form>

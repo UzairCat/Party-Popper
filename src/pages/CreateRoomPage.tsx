@@ -2,9 +2,11 @@ import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '../components/common/Button'
 import { IdentityPicker } from '../components/player/IdentityPicker'
-import { DEMO_ROOM_CODE, getAvatarEmoji, getColourHex } from '../data/playerOptions'
+import { getAvatarEmoji, getColourHex } from '../data/playerOptions'
+import { createRoom } from '../lib/socket'
+import { saveSession } from '../lib/session'
 import { validateDisplayName } from '../lib/validation'
-import type { LobbyNavigationState, PlayerAvatar, PlayerColour } from '../types/room'
+import type { PlayerAvatar, PlayerColour } from '../types/room'
 
 export function CreateRoomPage() {
   const navigate = useNavigate()
@@ -14,8 +16,10 @@ export function CreateRoomPage() {
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (isSubmitting) return
+
     const validationError = validateDisplayName(name)
 
     if (validationError) {
@@ -26,16 +30,25 @@ export function CreateRoomPage() {
     setError(null)
     setIsSubmitting(true)
 
-    const state: LobbyNavigationState = {
-      mode: 'host',
-      name: name.trim(),
-      avatar,
-      colour,
-    }
+    try {
+      const response = await createRoom({ name: name.trim(), avatar, colour })
 
-    window.setTimeout(() => {
-      navigate(`/room/${DEMO_ROOM_CODE}`, { state })
-    }, 350)
+      if (!response.ok) {
+        setError(response.error.message)
+        setIsSubmitting(false)
+        return
+      }
+
+      saveSession(response.data.session)
+      navigate(`/room/${response.data.room.code}`)
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : 'Could not create the room. Try again.',
+      )
+      setIsSubmitting(false)
+    }
   }
 
   return (

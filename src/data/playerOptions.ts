@@ -1,4 +1,4 @@
-import type { Player, PlayerAvatar, PlayerColour } from '../types/room'
+import type { PlayerAvatar, PlayerColour } from '../types/room'
 
 interface ColourOption {
   id: PlayerColour
@@ -32,35 +32,6 @@ export const PLAYER_AVATARS: AvatarOption[] = [
   { id: 'cat', label: 'Cat', emoji: '🐱' },
   { id: 'monkey', label: 'Monkey', emoji: '🐵' },
   { id: 'sparkle', label: 'Sparkles', emoji: '✨' },
-]
-
-export const DEMO_ROOM_CODE = 'J7KQ'
-
-export const DEMO_PLAYERS: Player[] = [
-  {
-    id: 'demo-host',
-    name: 'Uzair',
-    avatar: 'robot',
-    colour: 'purple',
-    isReady: true,
-    isConnected: true,
-  },
-  {
-    id: 'demo-alex',
-    name: 'Alex',
-    avatar: 'frog',
-    colour: 'green',
-    isReady: true,
-    isConnected: true,
-  },
-  {
-    id: 'demo-sarah',
-    name: 'Sarah',
-    avatar: 'cool',
-    colour: 'blue',
-    isReady: true,
-    isConnected: true,
-  },
 ]
 
 export function getAvatarEmoji(avatar: PlayerAvatar) {

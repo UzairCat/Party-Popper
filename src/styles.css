@@ -839,6 +839,53 @@ select:focus-visible {
   margin: 0 auto;
 }
 
+.lobby-message-card {
+  display: flex;
+  min-height: 480px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(28px, 6vw, 64px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+}
+
+.lobby-message-card .not-found__mark {
+  margin-bottom: 24px;
+}
+
+.lobby-message-card h1 {
+  margin-bottom: 12px;
+  font-size: clamp(2rem, 5vw, 3.5rem);
+}
+
+.lobby-message-card > p:not(.eyebrow) {
+  max-width: 520px;
+  margin-bottom: 26px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.lobby-message-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
+.large-loader {
+  width: 52px;
+  height: 52px;
+  margin-bottom: 24px;
+  border: 5px solid #ddd6f8;
+  border-top-color: var(--purple);
+  border-radius: 50%;
+  animation: spin 800ms linear infinite;
+}
+
 .lobby-toolbar {
   display: flex;
   align-items: flex-end;
@@ -888,6 +935,18 @@ select:focus-visible {
   border-radius: 50%;
   background: #20a873;
   box-shadow: 0 0 0 4px rgba(32, 168, 115, 0.13);
+}
+
+.connection-chip--connecting,
+.connection-chip--reconnecting {
+  color: #8c6200;
+  background: #fff1c5;
+}
+
+.connection-chip--connecting span,
+.connection-chip--reconnecting span {
+  background: #e4a719;
+  box-shadow: 0 0 0 4px rgba(228, 167, 25, 0.14);
 }
 
 .room-code-card {
