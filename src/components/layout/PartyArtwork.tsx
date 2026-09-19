@@ -12,7 +12,7 @@ export function PartyArtwork() {
         <ellipse cx="98" cy="169" rx="14" ry="8" fill="#f44332" />
         <ellipse cx="220" cy="159" rx="14" ry="8" fill="#f44332" />
       </svg>
-      <div className="party-art__quiz"><span>QUICK THINKING.</span><strong>?</strong><div><i>A</i><i>B</i><i>C</i><i>D</i></div></div>
+      <div className="party-art__pack"><span>ONE ROOM. MANY GAMES.</span><strong>PLAY</strong><div><i>★</i><i>↗</i><i>✦</i></div></div>
       <div className="party-art__bolt">↯<span>BRING<br />YOUR A-GAME</span></div>
       <div className="party-art__seal">GOOD<br /><strong>TIMES</strong><br />GUARANTEED*</div>
       <span className="party-art__spark party-art__spark--one">✳</span>

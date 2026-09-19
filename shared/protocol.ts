@@ -1,4 +1,3 @@
-import type { FourChoiceSettings, FourChoiceSetupSnapshot, QuizSnapshot } from './four-choice.js'
 import type { GameId } from './games.js'
 
 export const ROOM_CODE_LENGTH = 4
@@ -40,13 +39,11 @@ export interface Player {
   name: string
   avatar: PlayerAvatar
   colour: PlayerColour
-  isReady: boolean
   isConnected: boolean
 }
 
 export interface RoomSettings {
   maxPlayers: number
-  requireReady: boolean
   allowLateJoin: boolean
   filterNames: boolean
 }
@@ -99,9 +96,7 @@ export type RoomErrorCode =
   | 'HOST_ONLY'
   | 'PLAYER_NOT_FOUND'
   | 'MIN_PLAYERS'
-  | 'PLAYERS_NOT_READY'
   | 'INVALID_GAME_STATE'
-  | 'NO_CATEGORIES'
   | 'ALREADY_IN_ROOM'
   | 'INTERNAL_ERROR'
 
@@ -135,10 +130,6 @@ export interface ClientToServerEvents {
     payload: SessionCredentials,
     acknowledge: (response: AckResponse<RoomSnapshot>) => void,
   ) => void
-  'player:ready': (
-    payload: { isReady: boolean },
-    acknowledge: (response: AckResponse<RoomSnapshot>) => void,
-  ) => void
   'settings:update': (
     payload: { settings: RoomSettings },
     acknowledge: (response: AckResponse<RoomSnapshot>) => void,
@@ -170,20 +161,6 @@ export interface ClientToServerEvents {
   'game:return-to-lobby': (
     acknowledge: (response: AckResponse<RoomSnapshot>) => void,
   ) => void
-  'quiz:settings:get': (
-    acknowledge: (response: AckResponse<FourChoiceSetupSnapshot>) => void,
-  ) => void
-  'quiz:settings:update': (
-    payload: { settings: FourChoiceSettings },
-    acknowledge: (response: AckResponse<FourChoiceSetupSnapshot>) => void,
-  ) => void
-  'quiz:start': (
-    acknowledge: (response: AckResponse<RoomSnapshot>) => void,
-  ) => void
-  'quiz:sync': (acknowledge: (response: AckResponse<QuizSnapshot>) => void) => void
-  'quiz:answer': (payload: { questionId: string; answer: number }, acknowledge: (response: AckResponse<QuizSnapshot>) => void) => void
-  'quiz:next': (acknowledge: (response: AckResponse<QuizSnapshot>) => void) => void
-  'quiz:menu': (acknowledge: (response: AckResponse<RoomSnapshot>) => void) => void
 }
 
 export interface ServerToClientEvents {
@@ -192,8 +169,6 @@ export interface ServerToClientEvents {
   'room:closed': (notice: RoomNotice) => void
   'player:kicked': (notice: RoomNotice) => void
   'session:ended': (notice: RoomNotice) => void
-  'quiz:state': (setup: FourChoiceSetupSnapshot) => void
-  'quiz:match': (state: QuizSnapshot) => void
 }
 
 export type InterServerEvents = Record<string, never>

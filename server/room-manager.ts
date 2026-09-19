@@ -108,7 +108,7 @@ export class RoomManager {
     const identity = this.validateIdentity(input)
     const timestamp = this.now()
     const code = this.generateRoomCode()
-    const player = this.createPlayer(identity, connectionId, timestamp, true)
+    const player = this.createPlayer(identity, connectionId, timestamp)
     const room: StoredRoom = {
       id: this.createId(),
       code,
@@ -118,7 +118,6 @@ export class RoomManager {
       players: new Map([[player.id, player]]),
       settings: {
         maxPlayers: 8,
-        requireReady: true,
         allowLateJoin: false,
         filterNames: true,
       },
@@ -157,7 +156,7 @@ export class RoomManager {
       throw new RoomError('NAME_TAKEN', 'That name is already being used in this room.')
     }
 
-    const player = this.createPlayer(identity, connectionId, this.now(), false)
+    const player = this.createPlayer(identity, connectionId, this.now())
     room.players.set(player.id, player)
     this.touch(room)
 
@@ -187,30 +186,6 @@ export class RoomManager {
 
     player.connectionIds.add(connectionId)
     player.isConnected = true
-    this.touch(room)
-    return this.toSnapshot(room)
-  }
-
-  setReady(
-    session: SocketSession,
-    connectionId: string,
-    isReady: boolean,
-  ): RoomSnapshot {
-    const { room, player } = this.authorize(session, connectionId)
-
-    if (room.status !== 'WAITING') {
-      throw new RoomError('INVALID_GAME_STATE', 'Ready status can only change in the party lobby.')
-    }
-
-    if (player.id === room.hostId) {
-      throw new RoomError('INVALID_INPUT', 'The host starts the game instead of readying up.')
-    }
-
-    if (typeof isReady !== 'boolean') {
-      throw new RoomError('INVALID_INPUT', 'Ready status must be true or false.')
-    }
-
-    player.isReady = isReady
     this.touch(room)
     return this.toSnapshot(room)
   }
@@ -263,7 +238,7 @@ export class RoomManager {
     connectionId: string,
     playerId: string,
   ): RoomSnapshot {
-    const { room, player: currentHost } = this.authorizeHost(session, connectionId)
+    const { room } = this.authorizeHost(session, connectionId)
 
     if (typeof playerId !== 'string') {
       throw new RoomError('INVALID_INPUT', 'Choose a valid player.')
@@ -283,8 +258,6 @@ export class RoomManager {
       return this.toSnapshot(room)
     }
 
-    currentHost.isReady = false
-    nextHost.isReady = true
     room.hostId = nextHost.id
     this.touch(room)
     return this.toSnapshot(room)
@@ -307,7 +280,10 @@ export class RoomManager {
 
   openGameSelection(session: SocketSession, connectionId: string): RoomSnapshot {
     const { room } = this.authorizeHost(session, connectionId)
-    this.validateLobbyReady(room)
+
+    if (room.status !== 'WAITING') {
+      throw new RoomError('INVALID_GAME_STATE', 'The room has already left the party lobby.')
+    }
 
     room.status = 'GAME_SELECT'
     room.selectedGameId = null
@@ -362,63 +338,6 @@ export class RoomManager {
 
     room.status = 'WAITING'
     room.selectedGameId = null
-    this.touch(room)
-    return this.toSnapshot(room)
-  }
-
-  getSelectedGame(
-    session: SocketSession,
-    connectionId: string,
-    gameId: GameId,
-  ): RoomSnapshot {
-    const { room } = this.authorize(session, connectionId)
-    this.validateSelectedGame(room, gameId)
-    this.touch(room)
-    return this.toSnapshot(room)
-  }
-
-  getSelectedGameAsHost(
-    session: SocketSession,
-    connectionId: string,
-    gameId: GameId,
-  ): RoomSnapshot {
-    const { room } = this.authorizeHost(session, connectionId)
-    this.validateSelectedGame(room, gameId)
-    this.touch(room)
-    return this.toSnapshot(room)
-  }
-
-  startSelectedGame(
-    session: SocketSession,
-    connectionId: string,
-    gameId: GameId,
-  ): RoomSnapshot {
-    const { room } = this.authorizeHost(session, connectionId)
-    this.validateSelectedGame(room, gameId)
-    const connectedPlayers = [...room.players.values()].filter(
-      (player) => player.isConnected,
-    )
-
-    if (connectedPlayers.length < 2) {
-      throw new RoomError('MIN_PLAYERS', 'At least two connected players are needed to start.')
-    }
-
-    this.touch(room)
-    return this.toSnapshot(room)
-  }
-
-  setGamePlaying(session: SocketSession, connectionId: string): RoomSnapshot {
-    const { room } = this.authorizeHost(session, connectionId)
-    this.validateSelectedGame(room, 'FOUR_CHOICE')
-    room.status = 'PLAYING'
-    this.touch(room)
-    return this.toSnapshot(room)
-  }
-
-  finishGame(session: SocketSession, connectionId: string): RoomSnapshot {
-    const { room } = this.authorizeHost(session, connectionId)
-    this.validateSelectedGame(room, 'FOUR_CHOICE')
-    room.status = 'GAME_SETUP'
     this.touch(room)
     return this.toSnapshot(room)
   }
@@ -500,34 +419,6 @@ export class RoomManager {
     return authorized
   }
 
-  private validateLobbyReady(room: StoredRoom) {
-    if (room.status !== 'WAITING') {
-      throw new RoomError('INVALID_GAME_STATE', 'The room has already left the party lobby.')
-    }
-
-    const connectedPlayers = [...room.players.values()].filter(
-      (player) => player.isConnected,
-    )
-
-    if (connectedPlayers.length < 2) {
-      throw new RoomError('MIN_PLAYERS', 'At least two connected players are needed to continue.')
-    }
-
-    const unreadyPlayers = [...room.players.values()].filter(
-      (player) => player.id !== room.hostId && (!player.isReady || !player.isConnected),
-    )
-
-    if (room.settings.requireReady && unreadyPlayers.length > 0) {
-      throw new RoomError('PLAYERS_NOT_READY', 'Everyone needs to be ready first.')
-    }
-  }
-
-  private validateSelectedGame(room: StoredRoom, gameId: GameId) {
-    if (!['GAME_SETUP', 'PLAYING'].includes(room.status) || room.selectedGameId !== gameId) {
-      throw new RoomError('INVALID_GAME_STATE', 'That game is not currently being configured.')
-    }
-  }
-
   private requireRoom(rawCode: unknown) {
     const code = this.normaliseRoomCode(rawCode)
     const room = this.rooms.get(code)
@@ -598,7 +489,6 @@ export class RoomManager {
     }
 
     if (
-      typeof settings.requireReady !== 'boolean' ||
       typeof settings.allowLateJoin !== 'boolean' ||
       typeof settings.filterNames !== 'boolean'
     ) {
@@ -607,7 +497,6 @@ export class RoomManager {
 
     return {
       maxPlayers: settings.maxPlayers,
-      requireReady: settings.requireReady,
       allowLateJoin: settings.allowLateJoin,
       filterNames: settings.filterNames,
     }
@@ -617,14 +506,12 @@ export class RoomManager {
     identity: PlayerIdentityInput,
     connectionId: string,
     joinedAt: number,
-    isHost: boolean,
   ): StoredPlayer {
     return {
       id: this.createId(),
       name: identity.name,
       avatar: identity.avatar,
       colour: identity.colour,
-      isReady: isHost,
       isConnected: true,
       sessionToken: this.createToken(),
       connectionIds: new Set([connectionId]),
@@ -664,7 +551,6 @@ export class RoomManager {
         throw new RoomError('INTERNAL_ERROR', 'Unable to transfer host control.')
       }
 
-      nextHost.isReady = true
       room.hostId = nextHost.id
       newHostName = nextHost.name
     }
@@ -723,7 +609,6 @@ export class RoomManager {
         name: player.name,
         avatar: player.avatar,
         colour: player.colour,
-        isReady: player.isReady,
         isConnected: player.isConnected,
       })),
       settings: { ...room.settings },

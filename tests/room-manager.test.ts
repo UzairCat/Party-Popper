@@ -119,7 +119,7 @@ describe('RoomManager', () => {
     )
   })
 
-  it('synchronizes ready state while keeping settings host-only', () => {
+  it('keeps room settings host-only without a shared ready state', () => {
     const { manager } = createHarness()
     const host = manager.createRoom(HOST, 'host-connection')
     const guest = manager.joinRoom(
@@ -127,29 +127,23 @@ describe('RoomManager', () => {
       'guest-connection',
     )
 
-    const readyRoom = manager.setReady(
-      socketSession(guest.session),
-      'guest-connection',
-      true,
-    )
-    expect(readyRoom.players.find((player) => player.id === guest.session.playerId)?.isReady).toBe(
-      true,
-    )
+    expect(guest.room.players[0]).not.toHaveProperty('isReady')
+    expect(guest.room.settings).not.toHaveProperty('requireReady')
 
     expectRoomError(
       () =>
         manager.updateSettings(socketSession(guest.session), 'guest-connection', {
-          ...readyRoom.settings,
-          requireReady: false,
+          ...guest.room.settings,
+          allowLateJoin: true,
         }),
       'HOST_ONLY',
     )
 
     const updated = manager.updateSettings(socketSession(host.session), 'host-connection', {
-      ...readyRoom.settings,
-      requireReady: false,
+      ...guest.room.settings,
+      allowLateJoin: true,
     })
-    expect(updated.settings.requireReady).toBe(false)
+    expect(updated.settings.allowLateJoin).toBe(true)
   })
 
   it('restores the same player after a temporary disconnect', () => {
@@ -227,19 +221,9 @@ describe('RoomManager', () => {
     )
   })
 
-  it('requires a ready lobby, synchronizes game selection, and validates quiz start players', () => {
+  it('opens game selection without a lobby ready check and rejects retired games', () => {
     const { manager } = createHarness()
     const host = manager.createRoom(HOST, 'host-connection')
-    const guest = manager.joinRoom(
-      { ...GUEST, roomCode: host.room.code },
-      'guest-connection',
-    )
-
-    expectRoomError(
-      () => manager.openGameSelection(socketSession(host.session), 'host-connection'),
-      'PLAYERS_NOT_READY',
-    )
-    manager.setReady(socketSession(guest.session), 'guest-connection', true)
     const selection = manager.openGameSelection(
       socketSession(host.session),
       'host-connection',
@@ -249,60 +233,27 @@ describe('RoomManager', () => {
     expectRoomError(
       () =>
         manager.selectGame(
-          socketSession(guest.session),
-          'guest-connection',
-          'FOUR_CHOICE',
-        ),
-      'HOST_ONLY',
-    )
-
-    const setup = manager.selectGame(
-      socketSession(host.session),
-      'host-connection',
-      'FOUR_CHOICE',
-    )
-    expect(setup).toMatchObject({ status: 'GAME_SETUP', selectedGameId: 'FOUR_CHOICE' })
-    expect(
-      manager.startSelectedGame(
-        socketSession(host.session),
-        'host-connection',
-        'FOUR_CHOICE',
-      ).players,
-    ).toHaveLength(2)
-
-    manager.disconnect(socketSession(guest.session), 'guest-connection')
-    expectRoomError(
-      () =>
-        manager.startSelectedGame(
           socketSession(host.session),
           'host-connection',
           'FOUR_CHOICE',
         ),
-      'MIN_PLAYERS',
+      'INVALID_INPUT',
     )
   })
 
-  it('lets only the host move back through game setup phases', () => {
+  it('lets only the host return from game selection to the lobby', () => {
     const { manager } = createHarness()
     const host = manager.createRoom(HOST, 'host-connection')
     const guest = manager.joinRoom(
       { ...GUEST, roomCode: host.room.code },
       'guest-connection',
     )
-    manager.setReady(socketSession(guest.session), 'guest-connection', true)
     manager.openGameSelection(socketSession(host.session), 'host-connection')
-    manager.selectGame(socketSession(host.session), 'host-connection', 'FOUR_CHOICE')
 
     expectRoomError(
-      () => manager.returnToGameSelection(socketSession(guest.session), 'guest-connection'),
+      () => manager.returnToLobby(socketSession(guest.session), 'guest-connection'),
       'HOST_ONLY',
     )
-
-    const selection = manager.returnToGameSelection(
-      socketSession(host.session),
-      'host-connection',
-    )
-    expect(selection).toMatchObject({ status: 'GAME_SELECT', selectedGameId: null })
 
     const lobby = manager.returnToLobby(socketSession(host.session), 'host-connection')
     expect(lobby).toMatchObject({ status: 'WAITING', selectedGameId: null })

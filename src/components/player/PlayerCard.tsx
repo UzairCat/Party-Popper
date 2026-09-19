@@ -68,10 +68,8 @@ export function PlayerCard({
       <div className="player-card__status">
         {!player.isConnected ? (
           <span className="status-pill status-pill--away">Reconnecting…</span>
-        ) : player.isReady ? (
-          <span className="status-pill status-pill--ready">✓ Ready</span>
         ) : (
-          <span className="status-pill">Not ready</span>
+          <span className="status-pill status-pill--online">● Connected</span>
         )}
       </div>
     </article>

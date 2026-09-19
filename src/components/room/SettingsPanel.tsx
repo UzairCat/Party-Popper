@@ -94,12 +94,6 @@ export function SettingsPanel({
           </div>
 
           <ToggleRow
-            label="Require ready status"
-            description="Everyone must be ready before the host starts."
-            checked={settings.requireReady}
-            onChange={(requireReady) => onChange({ ...settings, requireReady })}
-          />
-          <ToggleRow
             label="Allow late joining"
             description="Reserved for games that support joining in progress."
             checked={settings.allowLateJoin}

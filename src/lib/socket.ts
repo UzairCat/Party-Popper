@@ -1,5 +1,4 @@
 import { io, type Socket } from 'socket.io-client'
-import type { FourChoiceSettings, FourChoiceSetupSnapshot, QuizSnapshot } from '../../shared/four-choice'
 import type { GameId } from '../../shared/games'
 import type {
   AckResponse,
@@ -106,12 +105,6 @@ export async function reconnectRoom(session: SessionCredentials) {
   )
 }
 
-export function updateReady(isReady: boolean) {
-  return waitForAck<RoomSnapshot>((acknowledge) =>
-    socket.emit('player:ready', { isReady }, acknowledge),
-  )
-}
-
 export function updateRoomSettings(settings: RoomSettings) {
   return waitForAck<RoomSnapshot>((acknowledge) =>
     socket.emit('settings:update', { settings }, acknowledge),
@@ -160,33 +153,4 @@ export function returnToLobby() {
   return waitForAck<RoomSnapshot>((acknowledge) =>
     socket.emit('game:return-to-lobby', acknowledge),
   )
-}
-
-export function getFourChoiceSettings() {
-  return waitForAck<FourChoiceSetupSnapshot>((acknowledge) =>
-    socket.emit('quiz:settings:get', acknowledge),
-  )
-}
-
-export function updateFourChoiceSettings(settings: FourChoiceSettings) {
-  return waitForAck<FourChoiceSetupSnapshot>((acknowledge) =>
-    socket.emit('quiz:settings:update', { settings }, acknowledge),
-  )
-}
-
-export function startFourChoice() {
-  return waitForAck<RoomSnapshot>((acknowledge) => socket.emit('quiz:start', acknowledge))
-}
-
-export function syncQuiz() {
-  return waitForAck<QuizSnapshot>(ack => socket.emit('quiz:sync', ack))
-}
-export function submitQuizAnswer(questionId: string, answer: number) {
-  return waitForAck<QuizSnapshot>(ack => socket.emit('quiz:answer', { questionId, answer }, ack))
-}
-export function nextQuizQuestion() {
-  return waitForAck<QuizSnapshot>(ack => socket.emit('quiz:next', ack))
-}
-export function quizMenu() {
-  return waitForAck<RoomSnapshot>(ack => socket.emit('quiz:menu', ack))
 }

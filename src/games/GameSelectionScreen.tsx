@@ -67,7 +67,9 @@ export function GameSelectionScreen({
           ))}
         </div>
         <div>
-          <strong>{connectedPlayers.length} players connected</strong>
+          <strong>
+            {connectedPlayers.length} {connectedPlayers.length === 1 ? 'player' : 'players'} connected
+          </strong>
           <span>{isHost ? 'You control game selection' : 'Changes appear here instantly'}</span>
         </div>
       </div>
@@ -80,49 +82,54 @@ export function GameSelectionScreen({
         {!isHost ? <span className="host-control-note">Host controls</span> : null}
       </div>
 
-      <div className="game-card-grid">
-        {GAME_CATALOG.map((game) => (
-          <article className="game-card game-card--four-choice" key={game.id}>
-            <div className="game-card__art" aria-hidden="true">
-              <span>A</span>
-              <span>B</span>
-              <span>C</span>
-              <span>D</span>
-              <strong>?</strong>
-            </div>
-            <div className="game-card__body">
-              <span className="game-card__type">{game.type}</span>
-              <h3>{game.shortName}</h3>
-              <p>{game.description}</p>
-              <dl className="game-card__facts">
-                <div>
-                  <dt>Players</dt>
-                  <dd>{game.minimumPlayers}–{game.maximumPlayers}</dd>
-                </div>
-                <div>
-                  <dt>Duration</dt>
-                  <dd>{game.estimatedDuration}</dd>
-                </div>
-              </dl>
-              {isHost ? (
-                <Button
-                  type="button"
-                  size="large"
-                  disabled={isPending}
-                  onClick={() => onSelect(game.id)}
-                >
-                  Select game <span aria-hidden="true">→</span>
-                </Button>
-              ) : (
-                <div className="game-card__waiting" role="status">
-                  <span aria-hidden="true">…</span>
-                  Waiting for host
-                </div>
-              )}
-            </div>
-          </article>
-        ))}
-      </div>
+      {GAME_CATALOG.length ? (
+        <div className="game-card-grid">
+          {GAME_CATALOG.map((game, index) => (
+            <article className="game-card" key={game.id}>
+              <div className="game-card__art" aria-hidden="true">
+                <span>{String(index + 1).padStart(2, '0')}</span>
+                <strong>{game.shortName.slice(0, 1)}</strong>
+                <i>✦</i>
+              </div>
+              <div className="game-card__body">
+                <span className="game-card__type">{game.type}</span>
+                <h3>{game.shortName}</h3>
+                <p>{game.description}</p>
+                <dl className="game-card__facts">
+                  <div><dt>Players</dt><dd>{game.minimumPlayers}–{game.maximumPlayers}</dd></div>
+                  <div><dt>Duration</dt><dd>{game.estimatedDuration}</dd></div>
+                </dl>
+                {isHost ? (
+                  <Button type="button" size="large" disabled={isPending} onClick={() => onSelect(game.id)}>
+                    Select game <span aria-hidden="true">→</span>
+                  </Button>
+                ) : <span className="host-control-note">Waiting for the host</span>}
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="game-library-empty" role="status">
+          <div className="game-library-empty__art" aria-hidden="true">
+            <span>✦</span>
+            <span>+</span>
+            <span>★</span>
+          </div>
+          <p className="eyebrow eyebrow--accent">The workshop is open</p>
+          <h3>New party packs are on the way.</h3>
+          <p>
+            There are no playable games in the pack just yet. Each future game will bring its
+            own setup, player requirements, and ready check here.
+          </p>
+          {isHost ? (
+            <Button type="button" variant="secondary" disabled={isPending} onClick={onBackToLobby}>
+              Return to lobby
+            </Button>
+          ) : (
+            <span className="host-control-note">Waiting for the host</span>
+          )}
+        </div>
+      )}
     </section>
   )
 }

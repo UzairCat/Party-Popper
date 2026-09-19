@@ -59,6 +59,8 @@ try {
   })
   assert.equal(created.ok, true)
   assert.equal(created.data.room.players.length, 1)
+  assert.equal('isReady' in created.data.room.players[0], false)
+  assert.equal('requireReady' in created.data.room.settings, false)
 
   const roomCode = created.data.room.code
   const hostSession = created.data.session
@@ -77,14 +79,9 @@ try {
   await hostSawJoin
 
   const guestSession = joined.data.session
-  const hostSawReady = waitForEvent(
-    hostSocket,
-    'room:state',
-    (room) => room.players.find((player) => player.id === guestSession.playerId)?.isReady,
-  )
-  const ready = await emitWithAck(guestSocket, 'player:ready', { isReady: true })
-  assert.equal(ready.ok, true)
-  await hostSawReady
+  const rejectedGuestOpen = await emitWithAck(guestSocket, 'games:open')
+  assert.equal(rejectedGuestOpen.ok, false)
+  assert.equal(rejectedGuestOpen.error.code, 'HOST_ONLY')
 
   const guestSawGameSelection = waitForEvent(
     guestSocket,
@@ -96,54 +93,11 @@ try {
   assert.equal(openedGames.data.status, 'GAME_SELECT')
   await guestSawGameSelection
 
-  const rejectedGuestSelection = await emitWithAck(guestSocket, 'game:select', {
+  const retiredQuiz = await emitWithAck(hostSocket, 'game:select', {
     gameId: 'FOUR_CHOICE',
   })
-  assert.equal(rejectedGuestSelection.ok, false)
-  assert.equal(rejectedGuestSelection.error.code, 'HOST_ONLY')
-
-  const guestSawGameSetup = waitForEvent(
-    guestSocket,
-    'room:state',
-    (room) => room.status === 'GAME_SETUP' && room.selectedGameId === 'FOUR_CHOICE',
-  )
-  const guestSawQuizSetup = waitForEvent(guestSocket, 'quiz:state')
-  const selectedGame = await emitWithAck(hostSocket, 'game:select', {
-    gameId: 'FOUR_CHOICE',
-  })
-  assert.equal(selectedGame.ok, true)
-  await guestSawGameSetup
-  const defaultQuizSetup = await guestSawQuizSetup
-  assert.equal(defaultQuizSetup.settings.timePerQuestion, 15)
-  assert.equal(defaultQuizSetup.settings.questionCount, 20)
-  assert.equal(defaultQuizSetup.settings.categories.length, 15)
-
-  const rejectedGuestSettings = await emitWithAck(guestSocket, 'quiz:settings:update', {
-    settings: { ...defaultQuizSetup.settings, difficulty: 'hard' },
-  })
-  assert.equal(rejectedGuestSettings.ok, false)
-  assert.equal(rejectedGuestSettings.error.code, 'HOST_ONLY')
-
-  const nextQuizSettings = {
-    ...defaultQuizSetup.settings,
-    timePerQuestion: 20,
-    questionCount: 5,
-    difficulty: 'hard',
-    categories: ['science', 'history'],
-  }
-  const guestSawSettingsUpdate = waitForEvent(
-    guestSocket,
-    'quiz:state',
-    (setup) => setup.settings.timePerQuestion === 20,
-  )
-  const updatedSettings = await emitWithAck(hostSocket, 'quiz:settings:update', {
-    settings: nextQuizSettings,
-  })
-  assert.equal(updatedSettings.ok, true)
-  assert.deepEqual(updatedSettings.data.settings.categories, ['science', 'history'])
-  await guestSawSettingsUpdate
-
-  // Lobby smoke checks deliberately do not start generation or spend API credits.
+  assert.equal(retiredQuiz.ok, false)
+  assert.equal(retiredQuiz.error.code, 'INVALID_INPUT')
 
   const hostSawDisconnect = waitForEvent(
     hostSocket,
@@ -159,11 +113,6 @@ try {
     'room:state',
     (room) => room.players.find((player) => player.id === guestSession.playerId)?.isConnected,
   )
-  const guestRestoredQuizSetup = waitForEvent(
-    reconnectedGuestSocket,
-    'quiz:state',
-    (setup) => setup.settings.difficulty === 'hard',
-  )
   const reconnected = await emitWithAck(
     reconnectedGuestSocket,
     'room:reconnect',
@@ -171,14 +120,23 @@ try {
   )
   assert.equal(reconnected.ok, true)
   assert.equal(reconnected.data.players.length, 2)
+  assert.equal(reconnected.data.status, 'GAME_SELECT')
   await hostSawReconnect
-  await guestRestoredQuizSetup
 
   const transferred = await emitWithAck(hostSocket, 'host:transfer', {
     playerId: guestSession.playerId,
   })
   assert.equal(transferred.ok, true)
   assert.equal(transferred.data.hostId, guestSession.playerId)
+
+  const hostSawLobby = waitForEvent(
+    hostSocket,
+    'room:state',
+    (room) => room.status === 'WAITING',
+  )
+  const returned = await emitWithAck(reconnectedGuestSocket, 'game:return-to-lobby')
+  assert.equal(returned.ok, true)
+  await hostSawLobby
 
   const hostClosedNotice = waitForEvent(hostSocket, 'room:closed')
   const closed = await emitWithAck(reconnectedGuestSocket, 'room:close')

@@ -16,7 +16,6 @@
     "lint": "eslint .",
     "test": "vitest run",
     "verify:multiplayer": "node scripts/verify-multiplayer.mjs",
-    "verify:quiz": "node scripts/verify-quiz.mjs",
     "check": "npm run lint && npm run test && npm run build"
   },
   "dependencies": {

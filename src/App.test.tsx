@@ -19,7 +19,6 @@ vi.mock('./lib/socket', () => ({
   createRoom: vi.fn(),
   joinRoom: vi.fn(),
   reconnectRoom: vi.fn(),
-  updateReady: vi.fn(),
   updateRoomSettings: vi.fn(),
   kickPlayer: vi.fn(),
   transferHost: vi.fn(),
@@ -27,11 +26,7 @@ vi.mock('./lib/socket', () => ({
   closeRoom: vi.fn(),
   openGameSelection: vi.fn(),
   selectGame: vi.fn(),
-  returnToGameSelection: vi.fn(),
   returnToLobby: vi.fn(),
-  getFourChoiceSettings: vi.fn(),
-  updateFourChoiceSettings: vi.fn(),
-  startFourChoice: vi.fn(),
 }))
 
 function renderRoute(route: string) {

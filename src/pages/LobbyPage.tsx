@@ -7,31 +7,23 @@ import { PlayerCard } from '../components/player/PlayerCard'
 import { RoomCodeCard } from '../components/room/RoomCodeCard'
 import { SettingsPanel } from '../components/room/SettingsPanel'
 import { GameSelectionScreen } from '../games/GameSelectionScreen'
-import { FourChoiceMenu } from '../games/four-choice/FourChoiceMenu'
-import { QuizGame } from '../games/four-choice/QuizGame'
 import {
   closeRoom as closeRoomOnServer,
   disconnectSocket,
   ensureSocketConnected,
-  getFourChoiceSettings,
   kickPlayer,
   leaveRoom as leaveRoomOnServer,
   openGameSelection,
   reconnectRoom,
-  returnToGameSelection,
   returnToLobby,
   selectGame,
   socket,
-  startFourChoice,
   transferHost,
-  updateFourChoiceSettings,
-  updateReady,
   updateRoomSettings,
 } from '../lib/socket'
 import { clearSession, loadSession } from '../lib/session'
 import { normaliseRoomCode, ROOM_CODE_LENGTH } from '../lib/validation'
 import type { Player, RoomSettings, RoomSnapshot, SessionCredentials } from '../types/room'
-import type { FourChoiceSettings, FourChoiceSetupSnapshot } from '../../shared/four-choice'
 import type { GameId } from '../../shared/games'
 
 type PlayerAction = 'kick' | 'transfer'
@@ -63,7 +55,6 @@ export function LobbyPage() {
   const [pendingPlayerAction, setPendingPlayerAction] = useState<PendingPlayerAction | null>(null)
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false)
   const [closeDialogOpen, setCloseDialogOpen] = useState(false)
-  const [fourChoiceSetup, setFourChoiceSetup] = useState<FourChoiceSetupSnapshot | null>(null)
   const [actionPending, setActionPending] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
 
@@ -83,7 +74,6 @@ export function LobbyPage() {
       clearSession()
       setSession(null)
       setRoom(null)
-      setFourChoiceSetup(null)
       setSettingsOpen(false)
       setPageError(message)
       disconnectSocket()
@@ -121,17 +111,11 @@ export function LobbyPage() {
       void restoreSession()
     }
     const handleDisconnect = () => setConnectionState('reconnecting')
-    const handleRoomState = (nextRoom: RoomSnapshot) => {
-      setRoom(nextRoom)
-      if (nextRoom.status !== 'GAME_SETUP' || nextRoom.selectedGameId !== 'FOUR_CHOICE') {
-        setFourChoiceSetup(null)
-      }
-    }
+    const handleRoomState = (nextRoom: RoomSnapshot) => setRoom(nextRoom)
     const handleNotice = ({ message }: { message: string }) => notify(message)
     const handleRoomClosed = ({ message }: { message: string }) => endSession(message)
     const handleKicked = ({ message }: { message: string }) => endSession(message)
     const handleSessionEnded = ({ message }: { message: string }) => endSession(message)
-    const handleQuizState = (setup: FourChoiceSetupSnapshot) => setFourChoiceSetup(setup)
 
     socket.on('connect', handleConnect)
     socket.on('disconnect', handleDisconnect)
@@ -140,7 +124,6 @@ export function LobbyPage() {
     socket.on('room:closed', handleRoomClosed)
     socket.on('player:kicked', handleKicked)
     socket.on('session:ended', handleSessionEnded)
-    socket.on('quiz:state', handleQuizState)
 
     if (socket.connected) {
       void restoreSession()
@@ -164,52 +147,17 @@ export function LobbyPage() {
       socket.off('room:closed', handleRoomClosed)
       socket.off('player:kicked', handleKicked)
       socket.off('session:ended', handleSessionEnded)
-      socket.off('quiz:state', handleQuizState)
       disconnectSocket()
     }
   }, [notify, roomCode, session])
 
-  useEffect(() => {
-    if (
-      room?.status !== 'GAME_SETUP' ||
-      room.selectedGameId !== 'FOUR_CHOICE' ||
-      fourChoiceSetup ||
-      !socket.connected
-    ) {
-      return
-    }
-
-    let cancelled = false
-    void getFourChoiceSettings().then((response) => {
-      if (cancelled) return
-      if (response.ok) {
-        setFourChoiceSetup(response.data)
-      } else {
-        notify(response.error.message)
-      }
-    })
-
-    return () => {
-      cancelled = true
-    }
-  }, [fourChoiceSetup, notify, room])
-
   const currentPlayerId = session?.playerId
   const currentPlayer = room?.players.find((player) => player.id === currentPlayerId)
   const isCurrentPlayerHost = Boolean(room && currentPlayerId === room.hostId)
-  const requiredPlayers = room?.players.filter((player) => player.id !== room.hostId) ?? []
-  const waitingCount = requiredPlayers.filter(
-    (player) => !player.isReady || !player.isConnected,
-  ).length
   const disconnectedCount = room?.players.filter((player) => !player.isConnected).length ?? 0
   const connectedPlayerCount = room?.players.length
     ? room.players.length - disconnectedCount
     : 0
-  const canStart = Boolean(
-    room &&
-      connectedPlayerCount >= 2 &&
-      (!room.settings.requireReady || waitingCount === 0),
-  )
 
   const runAction = async (action: () => Promise<void>) => {
     if (actionPending) return
@@ -268,23 +216,6 @@ export function LobbyPage() {
     })
   }
 
-  const toggleReady = () => {
-    if (!currentPlayer) return
-
-    void runAction(async () => {
-      const response = await updateReady(!currentPlayer.isReady)
-      if (!response.ok) {
-        notify(response.error.message)
-        return
-      }
-
-      setRoom(response.data)
-      notify(response.data.players.find((player) => player.id === currentPlayer.id)?.isReady
-        ? 'You’re ready!'
-        : 'You’re no longer ready.')
-    })
-  }
-
   const confirmLeave = () => {
     void runAction(async () => {
       const response = await leaveRoomOnServer()
@@ -327,31 +258,6 @@ export function LobbyPage() {
     })
   }
 
-  const handleSelectGame = (gameId: GameId) => {
-    void runAction(async () => {
-      const response = await selectGame(gameId)
-      if (!response.ok) {
-        notify(response.error.message)
-        return
-      }
-
-      setRoom(response.data)
-    })
-  }
-
-  const handleBackToGames = () => {
-    void runAction(async () => {
-      const response = await returnToGameSelection()
-      if (!response.ok) {
-        notify(response.error.message)
-        return
-      }
-
-      setRoom(response.data)
-      setFourChoiceSetup(null)
-    })
-  }
-
   const handleBackToLobby = () => {
     void runAction(async () => {
       const response = await returnToLobby()
@@ -364,22 +270,15 @@ export function LobbyPage() {
     })
   }
 
-  const handleFourChoiceSettings = (settings: FourChoiceSettings) => {
+  const handleSelectGame = (gameId: GameId) => {
     void runAction(async () => {
-      const response = await updateFourChoiceSettings(settings)
+      const response = await selectGame(gameId)
       if (!response.ok) {
         notify(response.error.message)
         return
       }
 
-      setFourChoiceSetup(response.data)
-    })
-  }
-
-  const handleFourChoiceStart = () => {
-    void runAction(async () => {
-      const response = await startFourChoice()
-      if (!response.ok) notify(response.error.message)
+      setRoom(response.data)
     })
   }
 
@@ -432,10 +331,6 @@ export function LobbyPage() {
     />
   ) : null
 
-  if (room.status === 'PLAYING' && room.selectedGameId === 'FOUR_CHOICE') {
-    return <><QuizGame room={room} playerId={currentPlayer.id} onLeave={() => setLeaveDialogOpen(true)} />{leaveDialog}{toast ? <Toast message={toast} /> : null}</>
-  }
-
   if (room.status === 'GAME_SELECT') {
     return (
       <>
@@ -453,48 +348,14 @@ export function LobbyPage() {
     )
   }
 
-  if (room.status === 'GAME_SETUP' && room.selectedGameId === 'FOUR_CHOICE') {
-    if (!fourChoiceSetup) {
-      return (
-        <section className="lobby-page page-enter">
-          <div className="lobby-message-card" role="status">
-            <span className="large-loader" aria-hidden="true" />
-            <p className="eyebrow eyebrow--accent">Four Choice</p>
-            <h1>Loading game settings…</h1>
-            <p>Synchronizing the host’s setup with this device.</p>
-          </div>
-        </section>
-      )
-    }
-
-    return (
-      <>
-        <FourChoiceMenu
-          room={room}
-          currentPlayerId={currentPlayer.id}
-          setup={fourChoiceSetup}
-          isPending={actionPending}
-          onSettingsChange={handleFourChoiceSettings}
-          onBackToGames={handleBackToGames}
-          onStart={handleFourChoiceStart}
-          onLeave={() => setLeaveDialogOpen(true)}
-        />
-        {leaveDialog}
-        {toast ? <Toast message={toast} /> : null}
-      </>
-    )
-  }
-
   const lobbyMessage =
-    room.players.length < 2
+    connectedPlayerCount < 2
       ? 'Waiting for more players…'
       : disconnectedCount > 0
         ? `Waiting for ${disconnectedCount} ${disconnectedCount === 1 ? 'player' : 'players'} to reconnect…`
-      : waitingCount > 0 && room.settings.requireReady
-        ? `Waiting for ${waitingCount} ${waitingCount === 1 ? 'player' : 'players'}…`
         : isCurrentPlayerHost
-          ? 'Everyone’s ready — start whenever you want.'
-          : 'Everyone’s ready! The host can start the game.'
+          ? `${connectedPlayerCount} players connected — choose a game whenever you want.`
+          : `${connectedPlayerCount} players connected — the host chooses the game.`
 
   return (
     <section className="lobby-page page-enter">
@@ -572,14 +433,14 @@ export function LobbyPage() {
       <section className="lobby-action-bar" aria-label="Lobby status and controls">
         <div className="lobby-status">
           <span
-            className={canStart ? 'lobby-status__icon is-ready' : 'lobby-status__icon'}
+            className={connectedPlayerCount > 1 ? 'lobby-status__icon is-active' : 'lobby-status__icon'}
             aria-hidden="true"
           >
-            {canStart ? '✓' : '…'}
+            {connectedPlayerCount > 1 ? '●' : '…'}
           </span>
           <div>
             <strong>{lobbyMessage}</strong>
-            <span>{room.settings.requireReady ? 'Ready check is on' : 'Ready check is off'}</span>
+            <span>Ready checks belong to each game’s own setup.</span>
           </div>
         </div>
 
@@ -587,22 +448,13 @@ export function LobbyPage() {
           <Button
             type="button"
             size="large"
-            disabled={!canStart || actionPending}
-            title={!canStart ? 'At least two connected players must be ready.' : undefined}
+            disabled={actionPending || connectionState !== 'connected'}
             onClick={handleOpenGameSelection}
           >
-            Choose game <span aria-hidden="true">→</span>
+            Browse games <span aria-hidden="true">→</span>
           </Button>
         ) : (
-          <Button
-            type="button"
-            size="large"
-            variant={currentPlayer.isReady ? 'secondary' : 'primary'}
-            disabled={actionPending || connectionState !== 'connected'}
-            onClick={toggleReady}
-          >
-            {currentPlayer.isReady ? '✓ Ready' : 'I’m ready'}
-          </Button>
+          <span className="lobby-host-wait">Waiting for host</span>
         )}
       </section>
 
