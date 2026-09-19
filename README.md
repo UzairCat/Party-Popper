@@ -39,6 +39,9 @@ The Node server serves the built single-page app and exposes `GET /health`. It r
 5. Under **Settings → Networking → Public Networking**, generate a Railway domain.
 
 6. In the existing service's **Variables** tab, add `OPENAI_API_KEY` with an OpenAI API key from a project with API billing enabled. Never use a `VITE_` prefix for a secret.
+
+   **Key-expiry reminder:** The deployment key created on 19 September 2026 is valid for 150 days and is expected to expire around **16 February 2027**. If AI quiz generation suddenly stops working around then, create a replacement key and update `OPENAI_API_KEY` in Railway's **Variables** tab.
+
 7. Optionally add `OPENAI_QUIZ_MODEL=gpt-4.1-mini` (the default). Use a Responses API model supporting Structured Outputs.
 8. Deploy the variable changes, create a new room, join on two devices, select Four Choice, choose five questions for an initial check, and press Start game.
 
