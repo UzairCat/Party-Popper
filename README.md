@@ -47,7 +47,9 @@ The Party Popper core owns rooms, players, host controls, connections, and game 
 
 ## Own It!
 
-Create a room with 2–8 connected players, choose **Own It!**, adjust the preset or advanced rules, and start. The highest opening dice roll leads. Roll and move, buy or auction property, collect rent, complete colour sets, build evenly (unless the host changes the rule), trade, mortgage, and settle debt. The last solvent player wins; limited matches use net worth: cash + full purchase value of unmortgaged property + mortgage value of mortgaged property + full cost of existing buildings.
+Create a room with 2–8 connected players and choose **Own It!**. Each player chooses one of 16 characters and 16 colours, then presses **Ready up** in the Own It! setup screen. The host chooses the **Classic** or **South Africa** board, adjusts the rules, and starts once everyone is ready. Characters and ready states belong to Own It!, not the Party Popper room.
+
+The highest opening dice roll leads. On your turn, click or keyboard-activate the two dice to roll; the physical dice animation settles on the server's result. Buy or auction property, collect rent, complete colour sets, build, trade, mortgage, and settle debt. Chance and Community Chest cards appear in the board centre when drawn. The last solvent player wins; limited matches use net worth: cash + full purchase value of unmortgaged property + mortgage value of mortgaged property + full cost of existing buildings.
 
 The server decides rolls, payments, ownership, timers, trades, auctions, bankruptcy, and turn order. Players can refresh or reconnect to restore the current match. Disconnected players remain in the match; after 30 seconds their turns are automated, and an unattended debt is liquidated before bankruptcy. The host can pause or end the match from the game menu. The current game is held in the server process, so a Railway restart or redeploy will end an in-progress match; save/resume across deployments is not part of this version. Keep one Railway replica.
 
@@ -58,7 +60,7 @@ The server decides rolls, payments, ownership, timers, trades, auctions, bankrup
 - Live Socket.IO player, host, and settings synchronization
 - Host-validated kick, transfer-host, close-room, and game-selection actions
 - Synchronized party-lobby and game-selection phases
-- Own It! game card, dedicated setup menu and configurable presets/advanced rules
+- Own It! game card, dedicated avatar/colour ready-up, two map choices, and configurable presets/advanced rules
 - Server-authoritative Own It! board, auctions, buildings, cards, mortgages, trades, debt, jail, time/round limits, winner and post-game navigation
 - No shared ready-up state; game packs control their own start requirements
 - Private browser session tokens with a 30-second refresh/reconnect grace period

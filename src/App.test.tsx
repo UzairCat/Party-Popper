@@ -56,7 +56,7 @@ describe('Party Popper routes', () => {
 
     await user.click(screen.getByRole('button', { name: /continue/i }))
     expect(
-      await screen.findByRole('heading', { name: /pick your player/i }),
+      await screen.findByRole('heading', { name: /join the party/i }),
     ).toBeInTheDocument()
   })
 

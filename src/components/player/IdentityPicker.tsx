@@ -1,13 +1,14 @@
 import type { CSSProperties } from 'react'
 import { PLAYER_AVATARS, PLAYER_COLOURS } from '../../data/playerOptions'
-import type { PlayerAvatar, PlayerColour } from '../../types/room'
+import type { PropertyAvatar, PropertyColour } from '../../../shared/property-game'
 import { AvatarArt } from './AvatarArt'
 
 interface IdentityPickerProps {
-  avatar: PlayerAvatar
-  colour: PlayerColour
-  onAvatarChange: (avatar: PlayerAvatar) => void
-  onColourChange: (colour: PlayerColour) => void
+  avatar: PropertyAvatar | null
+  colour: PropertyColour | null
+  onAvatarChange: (avatar: PropertyAvatar) => void
+  onColourChange: (colour: PropertyColour) => void
+  disabled?: boolean
 }
 
 export function IdentityPicker({
@@ -15,11 +16,12 @@ export function IdentityPicker({
   colour,
   onAvatarChange,
   onColourChange,
+  disabled = false,
 }: IdentityPickerProps) {
   return (
     <div className="identity-picker">
       <fieldset>
-        <legend>Pick a player</legend>
+        <legend>Choose your Own It! character</legend>
         <div className="avatar-options">
           {PLAYER_AVATARS.map((option) => (
             <button
@@ -28,6 +30,7 @@ export function IdentityPicker({
               className={`avatar-option ${avatar === option.id ? 'is-selected' : ''}`}
               aria-label={option.label}
               aria-pressed={avatar === option.id}
+              disabled={disabled}
               onClick={() => onAvatarChange(option.id)}
             >
               <AvatarArt avatar={option.id} />
@@ -47,6 +50,7 @@ export function IdentityPicker({
               style={{ '--player-colour': option.hex } as CSSProperties}
               aria-label={option.label}
               aria-pressed={colour === option.id}
+              disabled={disabled}
               onClick={() => onColourChange(option.id)}
             >
               <span aria-hidden="true" />

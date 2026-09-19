@@ -1,19 +1,13 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '../components/common/Button'
-import { IdentityPicker } from '../components/player/IdentityPicker'
-import { getColourHex } from '../data/playerOptions'
-import { AvatarArt } from '../components/player/AvatarArt'
 import { createRoom } from '../lib/socket'
 import { saveSession } from '../lib/session'
 import { validateDisplayName } from '../lib/validation'
-import type { PlayerAvatar, PlayerColour } from '../types/room'
 
 export function CreateRoomPage() {
   const navigate = useNavigate()
   const [name, setName] = useState('')
-  const [avatar, setAvatar] = useState<PlayerAvatar>('robot')
-  const [colour, setColour] = useState<PlayerColour>('purple')
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -32,7 +26,7 @@ export function CreateRoomPage() {
     setIsSubmitting(true)
 
     try {
-      const response = await createRoom({ name: name.trim(), avatar, colour })
+      const response = await createRoom({ name: name.trim() })
 
       if (!response.ok) {
         setError(response.error.message)
@@ -63,7 +57,7 @@ export function CreateRoomPage() {
           <div className="form-card__heading">
             <p className="eyebrow eyebrow--accent">You’re the host</p>
             <h1>Create a room</h1>
-            <p>Choose how you’ll show up, then invite the group.</p>
+            <p>Enter your name and invite the group. You’ll choose a character inside each game.</p>
           </div>
 
           <form onSubmit={handleSubmit} noValidate>
@@ -97,30 +91,17 @@ export function CreateRoomPage() {
               )}
             </div>
 
-            <IdentityPicker
-              avatar={avatar}
-              colour={colour}
-              onAvatarChange={setAvatar}
-              onColourChange={setColour}
-            />
-
             <Button type="submit" size="large" isLoading={isSubmitting}>
               Create room <span aria-hidden="true">→</span>
             </Button>
           </form>
         </div>
 
-        <aside className="identity-preview" aria-label="Player preview">
-          <p className="eyebrow">Player preview</p>
-          <div
-            className="identity-preview__avatar"
-            style={{ backgroundColor: getColourHex(colour) }}
-            aria-hidden="true"
-          >
-            <AvatarArt avatar={avatar} />
-          </div>
+        <aside className="identity-preview" aria-label="Room preview">
+          <p className="eyebrow">Your table</p>
+          <div className="identity-preview__avatar" aria-hidden="true">✦</div>
           <strong>{name.trim() || 'Your name'}</strong>
-          <span>♛ Host</span>
+          <span>♛ Host · Game characters come later</span>
         </aside>
       </div>
     </section>

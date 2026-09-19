@@ -1,4 +1,4 @@
-import { BOARD, GROUPS, OWNABLE_TILES, type BoardTile, type MatchSnapshot, type PropertySettings, type RulePreset } from '../../shared/property-game.js'
+import { GROUPS, getOwnableTiles, getPropertyBoard, type BoardTile, type MatchSnapshot, type PropertySettings, type RulePreset } from '../../shared/property-game.js'
 import { RoomError } from '../room-manager.js'
 
 const ranges: Partial<Record<keyof PropertySettings, [number, number, number]>> = {
@@ -30,6 +30,7 @@ export function validatePropertySettings(value: unknown): PropertySettings {
     if (typeof input[field] !== 'boolean') throw new RoomError('INVALID_INPUT', `The ${field} setting is invalid.`)
   }
   const choices: Record<string, string[]> = {
+    mapId: ['classic', 'south_africa'],
     preset: ['classic', 'quick', 'casual', 'custom'], buildingRule: ['even', 'free'],
     buildingTiming: ['own_turn', 'end_turn', 'any_time'], endCondition: ['last', 'rounds', 'time'],
   }
@@ -40,12 +41,12 @@ export function validatePropertySettings(value: unknown): PropertySettings {
 }
 
 export function ownedGroup(state: MatchSnapshot, playerId: string, group: string): boolean {
-  const tiles = BOARD.filter((tile) => tile.group === group)
+  const tiles = getPropertyBoard(state.settings.mapId).filter((tile) => tile.group === group)
   return tiles.length > 0 && tiles.every((tile) => state.properties[tile.index]?.ownerId === playerId)
 }
 
-export function groupTiles(tile: BoardTile): BoardTile[] {
-  return tile.group ? BOARD.filter((candidate) => candidate.group === tile.group) : []
+export function groupTiles(state: MatchSnapshot, tile: BoardTile): BoardTile[] {
+  return tile.group ? getPropertyBoard(state.settings.mapId).filter((candidate) => candidate.group === tile.group) : []
 }
 
 export function rentFor(state: MatchSnapshot, tile: BoardTile, diceTotal: number): number {
@@ -58,11 +59,11 @@ export function rentFor(state: MatchSnapshot, tile: BoardTile, diceTotal: number
     return holding.buildings === 0 && tile.group && ownedGroup(state, owner.id, tile.group) ? base * 2 : base
   }
   if (tile.type === 'TRANSPORT') {
-    const count = BOARD.filter((candidate) => candidate.type === 'TRANSPORT' && state.properties[candidate.index]?.ownerId === owner.id).length
+    const count = getPropertyBoard(state.settings.mapId).filter((candidate) => candidate.type === 'TRANSPORT' && state.properties[candidate.index]?.ownerId === owner.id).length
     return tile.rents?.[count - 1] ?? 0
   }
   if (tile.type === 'UTILITY') {
-    const count = BOARD.filter((candidate) => candidate.type === 'UTILITY' && state.properties[candidate.index]?.ownerId === owner.id).length
+    const count = getPropertyBoard(state.settings.mapId).filter((candidate) => candidate.type === 'UTILITY' && state.properties[candidate.index]?.ownerId === owner.id).length
     return diceTotal * (tile.rents?.[count - 1] ?? 0)
   }
   return 0
@@ -81,7 +82,7 @@ export function buildingSupply(state: MatchSnapshot): { houses: number; hotels: 
 export function netWorth(state: MatchSnapshot, playerId: string): number {
   const player = state.players[playerId]
   if (!player) return 0
-  return player.cash + OWNABLE_TILES.reduce((total, tile) => {
+  return player.cash + getOwnableTiles(state.settings.mapId).reduce((total, tile) => {
     const holding = state.properties[tile.index]
     if (holding?.ownerId !== playerId) return total
     return total + (holding.mortgaged ? tile.mortgage ?? 0 : tile.price ?? 0) + holding.buildings * (tile.buildCost ?? 0)

@@ -1,11 +1,20 @@
 export type PropertyGroup = 'brown' | 'sky' | 'pink' | 'orange' | 'red' | 'yellow' | 'green' | 'navy'
 export type TileType = 'START' | 'PROPERTY' | 'TRANSPORT' | 'UTILITY' | 'CARD' | 'TAX' | 'JAIL' | 'FREE' | 'GO_TO_JAIL'
 export type DeckName = 'event' | 'community'
+export type PropertyMapId = 'classic' | 'south_africa'
+
+export const PROPERTY_AVATAR_IDS = ['robot', 'frog', 'alien', 'cool', 'cowboy', 'cat', 'monkey', 'sparkle', 'fox', 'panda', 'bear', 'penguin', 'ghost', 'dragon', 'bee', 'astronaut'] as const
+export const PROPERTY_COLOUR_IDS = ['coral', 'blue', 'green', 'yellow', 'purple', 'orange', 'pink', 'cyan', 'mint', 'navy', 'lavender', 'red', 'teal', 'gold', 'plum', 'lime'] as const
+export type PropertyAvatar = typeof PROPERTY_AVATAR_IDS[number]
+export type PropertyColour = typeof PROPERTY_COLOUR_IDS[number]
+export interface PropertyPlayerProfile { avatar: PropertyAvatar | null; colour: PropertyColour | null; ready: boolean }
+export interface PropertySetupSnapshot { settings: PropertySettings; profiles: Record<string, PropertyPlayerProfile> }
 
 export interface BoardTile {
   index: number
   type: TileType
   name: string
+  region?: string
   group?: PropertyGroup
   price?: number
   rents?: readonly number[]
@@ -25,12 +34,12 @@ const cardTile = (index: number, name: string, deck: DeckName): BoardTile => ({ 
 export const BOARD: readonly BoardTile[] = [
   { index: 0, type: 'START', name: 'Start' },
   property(1, 'Moss Lane', 'brown', 60, [2, 10, 30, 90, 160, 250], 50),
-  cardTile(2, 'Neighbourhood News', 'community'),
+  cardTile(2, 'Community Chest', 'community'),
   property(3, 'Acorn Alley', 'brown', 60, [4, 20, 60, 180, 320, 450], 50),
   { index: 4, type: 'TAX', name: 'City Tax', amount: 200 },
   transport(5, 'North Station'),
   property(6, 'Cloud Court', 'sky', 100, [6, 30, 90, 270, 400, 550], 50),
-  cardTile(7, 'Lucky Break', 'event'),
+  cardTile(7, 'Chance', 'event'),
   property(8, 'Breeze Boulevard', 'sky', 100, [6, 30, 90, 270, 400, 550], 50),
   property(9, 'Bluebird Street', 'sky', 120, [8, 40, 100, 300, 450, 600], 50),
   { index: 10, type: 'JAIL', name: 'Jail / Visiting' },
@@ -40,12 +49,12 @@ export const BOARD: readonly BoardTile[] = [
   property(14, 'Carnival Crescent', 'pink', 160, [12, 60, 180, 500, 700, 900], 100),
   transport(15, 'East Station'),
   property(16, 'Copper Corner', 'orange', 180, [14, 70, 200, 550, 750, 950], 100),
-  cardTile(17, 'Neighbourhood News', 'community'),
+  cardTile(17, 'Community Chest', 'community'),
   property(18, 'Sunset Avenue', 'orange', 180, [14, 70, 200, 550, 750, 950], 100),
   property(19, 'Market Mile', 'orange', 200, [16, 80, 220, 600, 800, 1000], 100),
   { index: 20, type: 'FREE', name: 'Free Parking' },
   property(21, 'Ember Road', 'red', 220, [18, 90, 250, 700, 875, 1050], 150),
-  cardTile(22, 'Lucky Break', 'event'),
+  cardTile(22, 'Chance', 'event'),
   property(23, 'Ruby Rise', 'red', 220, [18, 90, 250, 700, 875, 1050], 150),
   property(24, 'Grand Parade', 'red', 240, [20, 100, 300, 750, 925, 1100], 150),
   transport(25, 'South Station'),
@@ -56,21 +65,39 @@ export const BOARD: readonly BoardTile[] = [
   { index: 30, type: 'GO_TO_JAIL', name: 'Go to Jail' },
   property(31, 'Fern Fields', 'green', 300, [26, 130, 390, 900, 1100, 1275], 200),
   property(32, 'Willow Way', 'green', 300, [26, 130, 390, 900, 1100, 1275], 200),
-  cardTile(33, 'Neighbourhood News', 'community'),
+  cardTile(33, 'Community Chest', 'community'),
   property(34, 'Evergreen Estate', 'green', 320, [28, 150, 450, 1000, 1200, 1400], 200),
   transport(35, 'West Station'),
-  cardTile(36, 'Lucky Break', 'event'),
+  cardTile(36, 'Chance', 'event'),
   property(37, 'Midnight Manor', 'navy', 350, [35, 175, 500, 1100, 1300, 1500], 200),
   { index: 38, type: 'TAX', name: 'Luxury Tax', amount: 100 },
   property(39, 'Crown Heights', 'navy', 400, [50, 200, 600, 1400, 1700, 2000], 200),
 ]
 
 export const OWNABLE_TILES = BOARD.filter((tile) => tile.price !== undefined)
+const SOUTH_AFRICA_NAMES: Record<number, [string, string?]> = {
+  0: ['Cape Town Start'], 1: ['Bo-Kaap', 'Western Cape'], 2: ['Community Chest'], 3: ['V&A Waterfront', 'Western Cape'], 4: ['Municipal Tax'], 5: ['Cape Town Station'],
+  6: ['Stellenbosch', 'Western Cape'], 7: ['Chance'], 8: ['Hermanus', 'Western Cape'], 9: ['Mossel Bay', 'Western Cape'], 10: ['Jail / Visiting'],
+  11: ['Knysna', 'Garden Route'], 12: ['Coastal Power'], 13: ['Plettenberg Bay', 'Garden Route'], 14: ['Gqeberha', 'Eastern Cape'], 15: ['Gqeberha Station'],
+  16: ['East London', 'Eastern Cape'], 17: ['Community Chest'], 18: ['Coffee Bay', 'Eastern Cape'], 19: ['Durban', 'KwaZulu-Natal'], 20: ['Free Parking'],
+  21: ['Ballito', 'KwaZulu-Natal'], 22: ['Chance'], 23: ['Pietermaritzburg', 'KwaZulu-Natal'], 24: ['Drakensberg', 'KwaZulu-Natal'], 25: ['Durban Station'],
+  26: ['Bloemfontein', 'Free State'], 27: ['Kimberley', 'Northern Cape'], 28: ['Highveld Water'], 29: ['Mahikeng', 'North West'], 30: ['Go to Jail'],
+  31: ['Soweto', 'Gauteng'], 32: ['Johannesburg', 'Gauteng'], 33: ['Community Chest'], 34: ['Pretoria', 'Gauteng'], 35: ['Johannesburg Station'],
+  36: ['Chance'], 37: ['Mbombela', 'Mpumalanga'], 38: ['Luxury Tax'], 39: ['Polokwane', 'Limpopo'],
+}
+export const SOUTH_AFRICA_BOARD: readonly BoardTile[] = BOARD.map((tile) => ({ ...tile, name: SOUTH_AFRICA_NAMES[tile.index][0], region: SOUTH_AFRICA_NAMES[tile.index][1] }))
+export const PROPERTY_MAPS = {
+  classic: { id: 'classic', name: 'Classic', subtitle: 'The original city circuit', board: BOARD },
+  south_africa: { id: 'south_africa', name: 'South Africa', subtitle: 'From the Cape to the Highveld', board: SOUTH_AFRICA_BOARD },
+} as const
+export const getPropertyBoard = (mapId: PropertyMapId): readonly BoardTile[] => PROPERTY_MAPS[mapId].board
+export const getOwnableTiles = (mapId: PropertyMapId): readonly BoardTile[] => getPropertyBoard(mapId).filter((tile) => tile.price !== undefined)
 export const GROUPS: readonly PropertyGroup[] = ['brown', 'sky', 'pink', 'orange', 'red', 'yellow', 'green', 'navy']
 
 export type EndCondition = 'last' | 'rounds' | 'time'
 export type RulePreset = 'classic' | 'quick' | 'casual' | 'custom'
 export interface PropertySettings {
+  mapId: PropertyMapId
   preset: RulePreset
   startingCash: number
   passStartReward: number
@@ -105,7 +132,7 @@ export interface PropertySettings {
 }
 
 export const CLASSIC_SETTINGS: PropertySettings = {
-  preset: 'classic', startingCash: 1500, passStartReward: 200, exactStartBonus: false,
+  mapId: 'classic', preset: 'classic', startingCash: 1500, passStartReward: 200, exactStartBonus: false,
   auctions: true, auctionTimer: 10, auctionIncrement: 10, freeParkingBonus: false,
   freeParkingStartingPot: 0, trading: true, tradeDevelopedGroups: false,
   buildingRule: 'even', buildingTiming: 'own_turn', limitedBuildings: true,
@@ -155,7 +182,7 @@ export const CARDS: readonly GameCard[] = [
 
 export interface PropertyHolding { ownerId: string | null; buildings: number; mortgaged: boolean }
 export interface MatchPlayer {
-  id: string; name: string; cash: number; position: number; inJail: boolean; jailTurns: number;
+  id: string; name: string; avatar: PropertyAvatar; colour: PropertyColour; cash: number; position: number; inJail: boolean; jailTurns: number;
   jailCards: string[]; bankrupt: boolean; afkTurns: number; lastRoll?: [number, number];
   stats: { purchased: number; rentPaid: number; rentCollected: number; housesBuilt: number; hotelsBuilt: number; trades: number; jailed: number; distance: number }
 }
@@ -170,8 +197,9 @@ export interface MatchSnapshot {
   order: string[]; currentPlayerId: string; round: number; turnNumber: number;
   turnOrderRolls: Record<string, number>; startedAt: number; endsAt: number | null;
   deadline: number | null; pot: number; dice: [number, number] | null; doublesCount: number;
+  lastRollAt: number | null;
   pendingTile: number | null; auction: AuctionState | null; trade: TradeOffer | null;
-  debt: DebtState | null; lastCard: GameCard | null; lastMove: { playerId: string; from: number; steps: number; to: number; at: number } | null;
+  debt: DebtState | null; lastCard: GameCard | null; lastCardPlayerId: string | null; lastCardAt: number | null; lastMove: { playerId: string; from: number; steps: number; to: number; at: number } | null;
   log: { id: number; at: number; text: string }[]; winnerId: string | null; winnerReason: string | null;
 }
 

@@ -6,14 +6,10 @@ import { RoomError, RoomManager } from '../server/room-manager'
 
 const HOST: PlayerIdentityInput = {
   name: 'Uzair',
-  avatar: 'robot',
-  colour: 'purple',
 }
 
 const GUEST: PlayerIdentityInput = {
   name: 'Alex',
-  avatar: 'frog',
-  colour: 'green',
 }
 
 function createHarness() {

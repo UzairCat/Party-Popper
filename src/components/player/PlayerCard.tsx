@@ -1,6 +1,4 @@
 import { useState, type CSSProperties } from 'react'
-import { getColourHex } from '../../data/playerOptions'
-import { AvatarArt } from './AvatarArt'
 import type { Player } from '../../types/room'
 
 interface PlayerCardProps {
@@ -21,7 +19,7 @@ export function PlayerCard({
   onTransferHost,
 }: PlayerCardProps) {
   const [menuOpen, setMenuOpen] = useState(false)
-  const colour = getColourHex(player.colour)
+  const colour = '#d9e7dd'
 
   return (
     <article
@@ -30,7 +28,7 @@ export function PlayerCard({
     >
       <div className="player-card__topline">
         <span className="player-card__avatar" aria-hidden="true">
-          <AvatarArt avatar={player.avatar} />
+          {player.name.slice(0, 1).toUpperCase()}
         </span>
         {canManage && !isCurrentPlayer ? (
           <div className="player-menu">

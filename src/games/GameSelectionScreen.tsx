@@ -1,8 +1,5 @@
-import type { CSSProperties } from 'react'
 import { GAME_CATALOG, type GameId } from '../../shared/games'
 import { Button } from '../components/common/Button'
-import { getColourHex } from '../data/playerOptions'
-import { AvatarArt } from '../components/player/AvatarArt'
 import type { RoomSnapshot } from '../types/room'
 
 interface GameSelectionScreenProps {
@@ -60,9 +57,8 @@ export function GameSelectionScreen({
             <span
               key={player.id}
               className={!player.isConnected ? 'is-away' : ''}
-              style={{ '--player-colour': getColourHex(player.colour) } as CSSProperties}
             >
-              <AvatarArt avatar={player.avatar} />
+              {player.name.slice(0, 1).toUpperCase()}
             </span>
           ))}
         </div>

@@ -1,5 +1,5 @@
 import { randomInt, randomUUID } from 'node:crypto'
-import { BOARD, CARDS, CLASSIC_SETTINGS, OWNABLE_TILES, type AuctionState, type DeckName, type MatchPhase, type MatchPlayer, type MatchSnapshot, type PropertyAction, type PropertyHolding, type PropertySettings, type TradeAssets, type TradeOffer } from '../../shared/property-game.js'
+import { CARDS, CLASSIC_SETTINGS, PROPERTY_AVATAR_IDS, PROPERTY_COLOUR_IDS, getOwnableTiles, getPropertyBoard, type AuctionState, type DeckName, type MatchPhase, type MatchPlayer, type MatchSnapshot, type PropertyAction, type PropertyAvatar, type PropertyColour, type PropertyHolding, type PropertyPlayerProfile, type PropertySettings, type PropertySetupSnapshot, type TradeAssets, type TradeOffer } from '../../shared/property-game.js'
 import type { RoomSnapshot } from '../../shared/protocol.js'
 import { RoomError } from '../room-manager.js'
 import { buildingSupply, completeSetCount, groupTiles, netWorth, ownedGroup, rentFor, validatePropertySettings } from './property-rules.js'
@@ -39,6 +39,7 @@ const shuffle = <T>(values: T[]): T[] => {
 
 export class PropertyGameManager {
   private readonly setups = new Map<string, PropertySettings>()
+  private readonly profiles = new Map<string, Record<string, PropertyPlayerProfile>>()
   private readonly matches = new Map<string, InternalMatch>()
   private readonly now: () => number
   private readonly die: () => number
@@ -52,6 +53,40 @@ export class PropertyGameManager {
 
   getSettings(roomCode: string): PropertySettings {
     return { ...(this.setups.get(roomCode) ?? CLASSIC_SETTINGS) }
+  }
+
+  getSetup(room: RoomSnapshot): PropertySetupSnapshot {
+    const stored = this.profiles.get(room.code) ?? {}
+    const profiles: Record<string, PropertyPlayerProfile> = {}
+    for (const player of room.players) profiles[player.id] = { ...(stored[player.id] ?? { avatar: null, colour: null, ready: false }) }
+    return { settings: this.getSettings(room.code), profiles }
+  }
+
+  setProfile(room: RoomSnapshot, playerId: string, value: { avatar?: PropertyAvatar | null; colour?: PropertyColour | null; ready?: boolean }): PropertySetupSnapshot {
+    if (room.status !== 'GAME_SETUP' || room.selectedGameId !== 'property_game') fail('Own It! is not in setup.')
+    if (!room.players.some((player) => player.id === playerId)) fail('You are not in this room.')
+    if (!value || typeof value !== 'object') fail('Choose a character and colour first.')
+    const profiles = this.profiles.get(room.code) ?? {}
+    const current = profiles[playerId] ?? { avatar: null, colour: null, ready: false }
+    const next = { ...current }
+    if (value.avatar !== undefined) {
+      if (value.avatar !== null && !PROPERTY_AVATAR_IDS.includes(value.avatar)) fail('Choose a valid Own It! character.')
+      next.avatar = value.avatar
+      next.ready = false
+    }
+    if (value.colour !== undefined) {
+      if (value.colour !== null && !PROPERTY_COLOUR_IDS.includes(value.colour)) fail('Choose a valid Own It! colour.')
+      next.colour = value.colour
+      next.ready = false
+    }
+    if (value.ready !== undefined) {
+      if (typeof value.ready !== 'boolean') fail('Choose a valid ready state.')
+      if (value.ready && (!next.avatar || !next.colour)) fail('Choose both a character and a colour to ready up.')
+      next.ready = value.ready
+    }
+    profiles[playerId] = next
+    this.profiles.set(room.code, profiles)
+    return this.getSetup(room)
   }
 
   setSettings(room: RoomSnapshot, playerId: string, value: unknown): PropertySettings {
@@ -70,11 +105,15 @@ export class PropertyGameManager {
   clear(roomCode: string): void {
     this.matches.delete(roomCode)
     this.setups.delete(roomCode)
+    this.profiles.delete(roomCode)
   }
 
   stopMatch(roomCode: string): void {
     this.matches.delete(roomCode)
   }
+
+  private board(match: InternalMatch) { return getPropertyBoard(match.state.settings.mapId) }
+  private ownable(match: InternalMatch) { return getOwnableTiles(match.state.settings.mapId) }
 
   start(room: RoomSnapshot, playerId: string): MatchSnapshot {
     if (room.hostId !== playerId) throw new RoomError('HOST_ONLY', 'Only the host can start Own It!.')
@@ -85,6 +124,8 @@ export class PropertyGameManager {
     if (connected.length < 2) throw new RoomError('MIN_PLAYERS', 'Own It! needs at least two players.')
     if (connected.length > 8) throw new RoomError('ROOM_FULL', 'Own It! supports up to eight players.')
     const settings = this.getSettings(room.code)
+    const setup = this.getSetup(room)
+    if (connected.some((player) => !setup.profiles[player.id]?.ready || !setup.profiles[player.id]?.avatar || !setup.profiles[player.id]?.colour)) fail('Every player must choose a character and colour, then ready up.')
     const rolls: Record<string, number> = {}
     const order = connected.map((player) => player.id)
     for (const id of order) rolls[id] = this.die() + this.die()
@@ -105,20 +146,20 @@ export class PropertyGameManager {
     })
     const players: Record<string, MatchPlayer> = {}
     for (const player of connected) players[player.id] = {
-      id: player.id, name: player.name, cash: settings.startingCash, position: 0, inJail: false, jailTurns: 0,
+      id: player.id, name: player.name, avatar: setup.profiles[player.id].avatar!, colour: setup.profiles[player.id].colour!, cash: settings.startingCash, position: 0, inJail: false, jailTurns: 0,
       jailCards: [], bankrupt: false, afkTurns: 0,
       stats: { purchased: 0, rentPaid: 0, rentCollected: 0, housesBuilt: 0, hotelsBuilt: 0, trades: 0, jailed: 0, distance: 0 },
     }
     const properties: Record<number, PropertyHolding> = {}
-    for (const tile of OWNABLE_TILES) properties[tile.index] = { ownerId: null, buildings: 0, mortgaged: false }
+    for (const tile of getOwnableTiles(settings.mapId)) properties[tile.index] = { ownerId: null, buildings: 0, mortgaged: false }
     const now = this.now()
     const state: MatchSnapshot = {
       status: 'ACTIVE', phase: 'INTRO', paused: false, settings, players, properties, order,
       currentPlayerId: order[0], round: 1, turnNumber: 1, turnOrderRolls: rolls,
       startedAt: now, endsAt: settings.endCondition === 'time' ? now + settings.timeLimitMinutes * 60_000 : null,
       deadline: now + 4500, pot: settings.freeParkingBonus ? settings.freeParkingStartingPot : 0,
-      dice: null, doublesCount: 0, pendingTile: null, auction: null, trade: null, debt: null,
-      lastCard: null, lastMove: null, log: [], winnerId: null, winnerReason: null,
+      dice: null, doublesCount: 0, lastRollAt: null, pendingTile: null, auction: null, trade: null, debt: null,
+      lastCard: null, lastCardPlayerId: null, lastCardAt: null, lastMove: null, log: [], winnerId: null, winnerReason: null,
     }
     const match: InternalMatch = {
       state,
@@ -337,6 +378,10 @@ export class PropertyGameManager {
     const state = match.state
     const dice: [number, number] = [this.die(), this.die()]
     state.dice = dice
+    state.lastRollAt = Math.max(this.now(), (state.lastRollAt ?? 0) + 1)
+    state.lastCard = null
+    state.lastCardPlayerId = null
+    state.lastCardAt = null
     state.players[playerId].lastRoll = dice
     const total = dice[0] + dice[1]
     const doubles = dice[0] === dice[1]
@@ -354,11 +399,12 @@ export class PropertyGameManager {
     const player = state.players[playerId]
     const from = player.position
     const raw = from + amount
-    const to = ((raw % BOARD.length) + BOARD.length) % BOARD.length
+    const boardLength = this.board(match).length
+    const to = ((raw % boardLength) + boardLength) % boardLength
     player.position = to
     player.stats.distance += Math.abs(amount)
     state.lastMove = { playerId, from, steps: amount, to, at: this.now() }
-    if (amount > 0 && raw >= BOARD.length) {
+    if (amount > 0 && raw >= boardLength) {
       const award = state.settings.passStartReward * (to === 0 && state.settings.exactStartBonus ? 2 : 1)
       player.cash += award
       this.log(match, `${this.name(match, playerId)} passed Start and collected $${award}.`)
@@ -370,7 +416,7 @@ export class PropertyGameManager {
   private moveTo(match: InternalMatch, playerId: string, target: number, collectStart: boolean, diceTotal: number): void {
     const state = match.state
     const from = state.players[playerId].position
-    const steps = (target - from + BOARD.length) % BOARD.length
+    const steps = (target - from + this.board(match).length) % this.board(match).length
     state.players[playerId].position = target
     state.players[playerId].stats.distance += steps
     state.lastMove = { playerId, from, steps, to: target, at: this.now() }
@@ -386,9 +432,8 @@ export class PropertyGameManager {
   private land(match: InternalMatch, playerId: string, diceTotal: number): void {
     const state = match.state
     const player = state.players[playerId]
-    const tile = BOARD[player.position]
+    const tile = this.board(match)[player.position]
     state.pendingTile = null
-    state.lastCard = null
     this.log(match, `${this.name(match, playerId)} landed on ${tile.name}.`)
     if (tile.price !== undefined) {
       const holding = state.properties[tile.index]
@@ -427,7 +472,7 @@ export class PropertyGameManager {
     const state = match.state
     const index = state.pendingTile
     if (index === null) throw new RoomError('INVALID_GAME_STATE', 'No property is available.')
-    const tile = BOARD[index]
+    const tile = this.board(match)[index]
     const holding = state.properties[index]
     if (holding.ownerId) fail('That property has already been sold.')
     state.pendingTile = null
@@ -506,7 +551,7 @@ export class PropertyGameManager {
     if (!debtorId) return
     this.log(match, `${this.name(match, debtorId)} is away. The bank is liquidating assets to cover the debt.`)
     for (let attempt = 0; attempt < 80 && state.debt; attempt += 1) {
-      const developed = OWNABLE_TILES.filter((item) => state.properties[item.index].ownerId === debtorId && state.properties[item.index].buildings > 0)
+      const developed = this.ownable(match).filter((item) => state.properties[item.index].ownerId === debtorId && state.properties[item.index].buildings > 0)
         .sort((a, b) => state.properties[b.index].buildings - state.properties[a.index].buildings)
       let sold = false
       for (const tile of developed) {
@@ -515,7 +560,7 @@ export class PropertyGameManager {
       }
       if (!sold) break
     }
-    for (const tile of OWNABLE_TILES) {
+    for (const tile of this.ownable(match)) {
       if (!state.debt) break
       if (state.properties[tile.index].ownerId !== debtorId || state.properties[tile.index].mortgaged) continue
       try { this.manageProperty(match, debtorId, { type: 'mortgage', tile: tile.index }) }
@@ -530,10 +575,13 @@ export class PropertyGameManager {
     const cards = match.decks[deck]
     const cardId = cards.shift()
     if (!cardId) { this.setPhase(match, 'MANAGEMENT'); return }
-    const card = CARDS.find((candidate) => candidate.id === cardId)!
+    const sourceCard = CARDS.find((candidate) => candidate.id === cardId)!
+    const card = sourceCard.id === 'e3' ? { ...sourceCard, text: `Move to ${this.board(match)[24].name}. Collect Start if you pass it.` } : sourceCard
     match.state.lastCard = card
+    match.state.lastCardPlayerId = playerId
+    match.state.lastCardAt = this.now()
     if (card.effect.type !== 'GET_OUT_OF_JAIL') cards.push(cardId)
-    this.log(match, `${this.name(match, playerId)} drew ${deck === 'event' ? 'Lucky Break' : 'Neighbourhood News'}: ${card.text}`)
+    this.log(match, `${this.name(match, playerId)} drew ${deck === 'event' ? 'Chance' : 'Community Chest'}: ${card.text}`)
     const effect = card.effect
     switch (effect.type) {
       case 'GAIN_MONEY': match.state.players[playerId].cash += effect.amount; break
@@ -549,7 +597,7 @@ export class PropertyGameManager {
         this.enqueuePayments(match, match.state.order.filter((id) => id !== playerId && !match.state.players[id].bankrupt).map((id) => ({ payerId: playerId, creditorId: id, amount: effect.amount, reason: 'card' })))
         return
       case 'REPAIRS': {
-        const holdings = OWNABLE_TILES.filter((tile) => match.state.properties[tile.index].ownerId === playerId)
+        const holdings = this.ownable(match).filter((tile) => match.state.properties[tile.index].ownerId === playerId)
         const cost = holdings.reduce((total, tile) => {
           const buildings = match.state.properties[tile.index].buildings
           return total + (buildings === 5 ? effect.hotel : buildings * effect.house)
@@ -559,7 +607,8 @@ export class PropertyGameManager {
       }
       case 'NEAREST': {
         const from = match.state.players[playerId].position
-        const tile = [...BOARD.slice(from + 1), ...BOARD.slice(0, from + 1)].find((candidate) => candidate.type === effect.tileType)
+        const board = this.board(match)
+        const tile = [...board.slice(from + 1), ...board.slice(0, from + 1)].find((candidate) => candidate.type === effect.tileType)
         if (tile) this.moveTo(match, playerId, tile.index, true, diceTotal)
         return
       }
@@ -606,6 +655,10 @@ export class PropertyGameManager {
     if (!state.settings.allowDoublesEscape) fail('Rolling doubles to escape is disabled.')
     const dice: [number, number] = [this.die(), this.die()]
     state.dice = dice
+    state.lastRollAt = Math.max(this.now(), (state.lastRollAt ?? 0) + 1)
+    state.lastCard = null
+    state.lastCardPlayerId = null
+    state.lastCardAt = null
     player.lastRoll = dice
     this.log(match, `${this.name(match, playerId)} rolled ${dice[0]} + ${dice[1]} in Jail.`)
     if (dice[0] === dice[1]) {
@@ -639,7 +692,7 @@ export class PropertyGameManager {
     state.auction = auction
     state.phase = 'AUCTION'
     state.deadline = auction.endsAt
-    this.log(match, `${BOARD[tile].name} is up for auction.`)
+    this.log(match, `${this.board(match)[tile].name} is up for auction.`)
   }
 
   private auctionAction(match: InternalMatch, playerId: string, action: Extract<PropertyAction, { type: 'auction_bid' | 'auction_pass' }>): void {
@@ -650,7 +703,7 @@ export class PropertyGameManager {
     if (this.now() >= auction.endsAt) { this.finishAuction(match); return }
     if (action.type === 'auction_pass') {
       auction.passed.push(playerId)
-      this.log(match, `${this.name(match, playerId)} passed on ${BOARD[auction.tile].name}.`)
+      this.log(match, `${this.name(match, playerId)} passed on ${this.board(match)[auction.tile].name}.`)
     } else {
       const min = auction.highestBid + state.settings.auctionIncrement
       if (!Number.isInteger(action.amount) || action.amount < min || action.amount > state.players[playerId].cash) {
@@ -660,7 +713,7 @@ export class PropertyGameManager {
       auction.highestBidderId = playerId
       auction.endsAt = this.now() + 5000
       state.deadline = auction.endsAt
-      this.log(match, `${this.name(match, playerId)} bid $${action.amount} on ${BOARD[auction.tile].name}.`)
+      this.log(match, `${this.name(match, playerId)} bid $${action.amount} on ${this.board(match)[auction.tile].name}.`)
     }
     const active = state.order.filter((id) => !state.players[id].bankrupt)
     if (active.every((id) => auction.passed.includes(id) || id === auction.highestBidderId)) this.finishAuction(match)
@@ -670,7 +723,7 @@ export class PropertyGameManager {
     const state = match.state
     const auction = state.auction
     if (!auction) return
-    const tile = BOARD[auction.tile]
+    const tile = this.board(match)[auction.tile]
     if (auction.highestBidderId && !state.properties[auction.tile].ownerId) {
       const winner = state.players[auction.highestBidderId]
       if (winner && !winner.bankrupt && winner.cash >= auction.highestBid) {
@@ -693,7 +746,7 @@ export class PropertyGameManager {
 
   private manageProperty(match: InternalMatch, playerId: string, action: Extract<PropertyAction, { type: 'build' | 'sell_building' | 'mortgage' | 'unmortgage' }>): void {
     const state = match.state
-    const tile = BOARD[action.tile]
+    const tile = this.board(match)[action.tile]
     if (!tile || tile.price === undefined || !Number.isInteger(action.tile)) throw new RoomError('INVALID_INPUT', 'Choose one of your properties.')
     const holding = state.properties[tile.index]
     if (holding.ownerId !== playerId) fail('You do not own that property.')
@@ -704,7 +757,7 @@ export class PropertyGameManager {
     if (state.settings.buildingTiming === 'end_turn' && state.phase !== 'MANAGEMENT' && !isDebtor) fail('You can build at the end of your turn only.')
     if (action.type === 'mortgage') {
       if (holding.mortgaged) fail('This property is already mortgaged.')
-      if (tile.group && groupTiles(tile).some((item) => state.properties[item.index].buildings > 0)) fail('Sell every building in this colour group first.')
+      if (tile.group && groupTiles(state, tile).some((item) => state.properties[item.index].buildings > 0)) fail('Sell every building in this colour group first.')
       holding.mortgaged = true
       state.players[playerId].cash += tile.mortgage ?? 0
       this.log(match, `${this.name(match, playerId)} mortgaged ${tile.name} for $${tile.mortgage}.`)
@@ -718,9 +771,9 @@ export class PropertyGameManager {
       this.log(match, `${this.name(match, playerId)} unmortgaged ${tile.name} for $${cost}.`)
     } else if (action.type === 'build') {
       if (isDebtor) fail('Resolve your debt before building.')
-      if (!tile.group || !ownedGroup(state, playerId, tile.group) || groupTiles(tile).some((item) => state.properties[item.index].mortgaged)) fail('Own an entire unmortgaged colour group to build.')
+      if (!tile.group || !ownedGroup(state, playerId, tile.group) || groupTiles(state, tile).some((item) => state.properties[item.index].mortgaged)) fail('Own an entire unmortgaged colour group to build.')
       if (holding.buildings >= 5) fail('This property already has a hotel.')
-      const group = groupTiles(tile).map((item) => state.properties[item.index].buildings)
+      const group = groupTiles(state, tile).map((item) => state.properties[item.index].buildings)
       if (state.settings.buildingRule === 'even' && holding.buildings !== Math.min(...group)) fail('Build evenly across this colour group.')
       if (holding.buildings === 4 && group.some((level) => level < 4)) fail('All properties in this group need four houses before a hotel.')
       if (state.players[playerId].cash < (tile.buildCost ?? 0)) fail('You cannot afford that building.')
@@ -733,7 +786,7 @@ export class PropertyGameManager {
       this.log(match, `${this.name(match, playerId)} built ${holding.buildings === 5 ? 'a hotel' : 'a house'} on ${tile.name}.`)
     } else {
       if (holding.buildings < 1) fail('There are no buildings to sell.')
-      const group = groupTiles(tile).map((item) => state.properties[item.index].buildings)
+      const group = groupTiles(state, tile).map((item) => state.properties[item.index].buildings)
       if (state.settings.buildingRule === 'even' && holding.buildings !== Math.max(...group)) fail('Sell evenly across this colour group.')
       if (holding.buildings === 5 && state.settings.limitedBuildings && buildingSupply(state).houses < 4) fail('The bank needs four houses available before you can sell this hotel.')
       holding.buildings -= 1
@@ -751,9 +804,9 @@ export class PropertyGameManager {
     }
     if (new Set(assets.properties).size !== assets.properties.length || new Set(assets.jailCards).size !== assets.jailCards.length) fail('Trade assets cannot be duplicated.')
     for (const index of assets.properties) {
-      const tile = BOARD[index]
+      const tile = this.board(match)[index]
       if (!Number.isInteger(index) || !tile || tile.price === undefined || state.properties[index].ownerId !== ownerId) fail('One of those properties is no longer available.')
-      if (!state.settings.tradeDevelopedGroups && tile.group && groupTiles(tile).some((item) => state.properties[item.index].buildings > 0)) fail('Sell buildings in that colour group before trading it.')
+      if (!state.settings.tradeDevelopedGroups && tile.group && groupTiles(state, tile).some((item) => state.properties[item.index].buildings > 0)) fail('Sell buildings in that colour group before trading it.')
     }
     for (const cardId of assets.jailCards) {
       if (!state.players[ownerId].jailCards.includes(cardId)) fail('One of those jail cards is no longer available.')
@@ -830,7 +883,7 @@ export class PropertyGameManager {
     const wasDebtor = state.debt?.playerId === playerId
     const resumePhase = wasDebtor ? 'MANAGEMENT' : state.trade?.previousPhase ?? (state.phase === 'INTRO' ? 'PRE_ROLL' : state.phase)
     if (state.debt?.creditorId === playerId) state.debt.creditorId = null
-    const owned = OWNABLE_TILES.filter((tile) => state.properties[tile.index].ownerId === playerId)
+    const owned = this.ownable(match).filter((tile) => state.properties[tile.index].ownerId === playerId)
     for (const tile of owned) {
       const holding = state.properties[tile.index]
       if (holding.buildings) {
@@ -899,7 +952,7 @@ export class PropertyGameManager {
     eligible.sort((a, b) => {
       const worth = netWorth(state, b) - netWorth(state, a)
       if (worth) return worth
-      const unmortgaged = (id: string) => OWNABLE_TILES.reduce((sum, tile) => sum + (state.properties[tile.index].ownerId === id && !state.properties[tile.index].mortgaged ? tile.price ?? 0 : 0), 0)
+      const unmortgaged = (id: string) => this.ownable(match).reduce((sum, tile) => sum + (state.properties[tile.index].ownerId === id && !state.properties[tile.index].mortgaged ? tile.price ?? 0 : 0), 0)
       const value = unmortgaged(b) - unmortgaged(a)
       if (value) return value
       const sets = completeSetCount(state, b) - completeSetCount(state, a)
@@ -909,7 +962,7 @@ export class PropertyGameManager {
     // Exact ties are exceptionally rare; roll until they separate.
     if (eligible.length > 1) {
       const first = eligible[0]
-      const unmortgaged = (id: string) => OWNABLE_TILES.reduce((sum, tile) => sum + (state.properties[tile.index].ownerId === id && !state.properties[tile.index].mortgaged ? tile.price ?? 0 : 0), 0)
+      const unmortgaged = (id: string) => this.ownable(match).reduce((sum, tile) => sum + (state.properties[tile.index].ownerId === id && !state.properties[tile.index].mortgaged ? tile.price ?? 0 : 0), 0)
       const tied = eligible.filter((id) => netWorth(state, id) === netWorth(state, first) && unmortgaged(id) === unmortgaged(first) && state.players[id].cash === state.players[first].cash && completeSetCount(state, id) === completeSetCount(state, first))
       if (tied.length > 1) {
         let rollWinner = tied[0]
@@ -970,7 +1023,10 @@ export class PropertyGameManager {
     state.currentPlayerId = state.order[nextIndex]
     state.doublesCount = 0
     state.dice = null
+    state.lastRollAt = null
     state.lastCard = null
+    state.lastCardPlayerId = null
+    state.lastCardAt = null
     this.setPhase(match, 'PRE_ROLL')
     this.log(match, `${this.name(match, state.currentPlayerId)}'s turn begins.`)
   }

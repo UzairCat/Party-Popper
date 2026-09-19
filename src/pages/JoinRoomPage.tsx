@@ -1,11 +1,9 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Button } from '../components/common/Button'
-import { IdentityPicker } from '../components/player/IdentityPicker'
 import { inspectRoom, joinRoom } from '../lib/socket'
 import { saveSession } from '../lib/session'
 import { normaliseRoomCode, ROOM_CODE_LENGTH, validateDisplayName } from '../lib/validation'
-import type { PlayerAvatar, PlayerColour } from '../types/room'
 
 type JoinStep = 'code' | 'identity'
 
@@ -20,8 +18,6 @@ export function JoinRoomPage() {
   const [step, setStep] = useState<JoinStep>(hasDirectCode ? 'identity' : 'code')
   const [roomCode, setRoomCode] = useState(directRoomCode)
   const [name, setName] = useState('')
-  const [avatar, setAvatar] = useState<PlayerAvatar>('frog')
-  const [colour, setColour] = useState<PlayerColour>('green')
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -76,8 +72,6 @@ export function JoinRoomPage() {
       const response = await joinRoom({
         roomCode,
         name: name.trim(),
-        avatar,
-        colour,
       })
 
       if (!response.ok) {
@@ -171,8 +165,8 @@ export function JoinRoomPage() {
           <>
             <div className="form-card__heading">
               <p className="eyebrow eyebrow--accent">Joining {roomCode}</p>
-              <h1>Pick your player</h1>
-              <p>You can change your look before you jump in.</p>
+              <h1>Join the party</h1>
+              <p>Enter your name. You’ll choose a character inside each game.</p>
             </div>
 
             <form onSubmit={handleJoinSubmit} noValidate>
@@ -205,13 +199,6 @@ export function JoinRoomPage() {
                   </span>
                 )}
               </div>
-
-              <IdentityPicker
-                avatar={avatar}
-                colour={colour}
-                onAvatarChange={setAvatar}
-                onColourChange={setColour}
-              />
 
               <Button type="submit" size="large" isLoading={isSubmitting}>
                 Join the room <span aria-hidden="true">→</span>

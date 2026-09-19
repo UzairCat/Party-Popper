@@ -1,7 +1,5 @@
 export type {
   Player,
-  PlayerAvatar,
-  PlayerColour,
   RoomSettings,
   RoomSnapshot,
   RoomStatus,

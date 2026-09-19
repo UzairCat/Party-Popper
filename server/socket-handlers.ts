@@ -97,6 +97,7 @@ export function registerSocketHandlers(
 
   const broadcastState = (room: RoomSnapshot) => {
     io.to(roomChannel(room.code)).emit('room:state', room)
+    if (room.selectedGameId === 'property_game' && room.status === 'GAME_SETUP') io.to(roomChannel(room.code)).emit('property:setup', propertyGames.getSetup(room))
   }
 
   const removeConnectionsFromRoom = (
@@ -191,6 +192,7 @@ export function registerSocketHandlers(
       broadcastState(room)
       if (room.selectedGameId === 'property_game') {
         socket.emit('property:settings', propertyGames.getSettings(room.code))
+        socket.emit('property:setup', propertyGames.getSetup(room))
         const game = propertyGames.getMatch(room.code)
         if (game) socket.emit('property:state', game)
       }
@@ -356,7 +358,28 @@ export function registerSocketHandlers(
         const room = roomManager.getAuthorizedRoom(session, socket.id)
         return propertyGames.setSettings(room, session.playerId, payload?.settings)
       })
-      if (settings && socket.data.session) io.to(roomChannel(socket.data.session.roomCode)).emit('property:settings', settings)
+      if (settings && socket.data.session) {
+        const room = roomManager.getAuthorizedRoom(socket.data.session, socket.id)
+        io.to(roomChannel(room.code)).emit('property:settings', settings)
+        io.to(roomChannel(room.code)).emit('property:setup', propertyGames.getSetup(room))
+      }
+    })
+
+    socket.on('property:setup:get', (acknowledge) => {
+      respond(acknowledge, () => {
+        const room = roomManager.getAuthorizedRoom(requireSession(socket), socket.id)
+        if (room.selectedGameId !== 'property_game') throw new RoomError('INVALID_GAME_STATE', 'Own It! is not selected.')
+        return propertyGames.getSetup(room)
+      })
+    })
+
+    socket.on('property:profile:update', (payload, acknowledge) => {
+      const setup = respond(acknowledge, () => {
+        const session = requireSession(socket)
+        const room = roomManager.getAuthorizedRoom(session, socket.id)
+        return propertyGames.setProfile(room, session.playerId, payload)
+      })
+      if (setup && socket.data.session) io.to(roomChannel(socket.data.session.roomCode)).emit('property:setup', setup)
     })
 
     socket.on('property:match:get', (acknowledge) => {

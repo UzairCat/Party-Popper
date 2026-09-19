@@ -1,6 +1,6 @@
 import { io, type Socket } from 'socket.io-client'
 import type { GameId } from '../../shared/games'
-import type { MatchSnapshot, PropertyAction, PropertySettings } from '../../shared/property-game'
+import type { MatchSnapshot, PropertyAction, PropertyAvatar, PropertyColour, PropertySettings, PropertySetupSnapshot } from '../../shared/property-game'
 import type {
   AckResponse,
   ClientToServerEvents,
@@ -162,6 +162,14 @@ export function getPropertySettings() {
 
 export function updatePropertySettings(settings: PropertySettings) {
   return waitForAck<PropertySettings>((acknowledge) => socket.emit('property:settings:update', { settings }, acknowledge))
+}
+
+export function getPropertySetup() {
+  return waitForAck<PropertySetupSnapshot>((acknowledge) => socket.emit('property:setup:get', acknowledge))
+}
+
+export function updatePropertyProfile(profile: { avatar?: PropertyAvatar | null; colour?: PropertyColour | null; ready?: boolean }) {
+  return waitForAck<PropertySetupSnapshot>((acknowledge) => socket.emit('property:profile:update', profile, acknowledge))
 }
 
 export function getPropertyMatch() {

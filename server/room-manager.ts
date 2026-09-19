@@ -5,8 +5,6 @@ import {
   DISPLAY_NAME_MIN_LENGTH,
   DISCONNECT_GRACE_MS,
   MAX_PLAYER_OPTIONS,
-  PLAYER_AVATAR_IDS,
-  PLAYER_COLOUR_IDS,
   ROOM_CODE_CHARACTERS,
   ROOM_CODE_LENGTH,
   ROOM_INACTIVITY_MS,
@@ -525,15 +523,7 @@ export class RoomManager {
       )
     }
 
-    if (!PLAYER_AVATAR_IDS.includes(input.avatar)) {
-      throw new RoomError('INVALID_INPUT', 'Choose a valid avatar.')
-    }
-
-    if (!PLAYER_COLOUR_IDS.includes(input.colour)) {
-      throw new RoomError('INVALID_INPUT', 'Choose a valid player colour.')
-    }
-
-    return { name, avatar: input.avatar, colour: input.colour }
+    return { name }
   }
 
   private validateSettings(settings: RoomSettings): RoomSettings {
@@ -567,8 +557,6 @@ export class RoomManager {
     return {
       id: this.createId(),
       name: identity.name,
-      avatar: identity.avatar,
-      colour: identity.colour,
       isConnected: true,
       sessionToken: this.createToken(),
       connectionIds: new Set([connectionId]),
@@ -665,8 +653,6 @@ export class RoomManager {
       players: [...room.players.values()].map((player) => ({
         id: player.id,
         name: player.name,
-        avatar: player.avatar,
-        colour: player.colour,
         isConnected: player.isConnected,
       })),
       settings: { ...room.settings },

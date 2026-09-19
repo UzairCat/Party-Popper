@@ -54,11 +54,11 @@ try {
   const guestSocket = await connectClient()
   const created = await emitWithAck(hostSocket, 'room:create', {
     name: 'Host Check',
-    avatar: 'robot',
-    colour: 'purple',
   })
   assert.equal(created.ok, true)
   assert.equal(created.data.room.players.length, 1)
+  assert.equal('avatar' in created.data.room.players[0], false)
+  assert.equal('colour' in created.data.room.players[0], false)
   assert.equal('isReady' in created.data.room.players[0], false)
   assert.equal('requireReady' in created.data.room.settings, false)
 
@@ -72,8 +72,6 @@ try {
   const joined = await emitWithAck(guestSocket, 'room:join', {
     roomCode,
     name: 'Guest Check',
-    avatar: 'frog',
-    colour: 'green',
   })
   assert.equal(joined.ok, true)
   await hostSawJoin
@@ -107,14 +105,22 @@ try {
   const settings = await emitWithAck(hostSocket, 'property:settings:get')
   assert.equal(settings.ok, true)
   assert.equal(settings.data.startingCash, 1500)
+  const unreadyStart = await emitWithAck(hostSocket, 'property:start')
+  assert.equal(unreadyStart.ok, false)
+  const hostLook = await emitWithAck(hostSocket, 'property:profile:update', { avatar: 'robot', colour: 'purple' })
+  assert.equal(hostLook.ok, true)
+  const guestLook = await emitWithAck(guestSocket, 'property:profile:update', { avatar: 'fox', colour: 'teal' })
+  assert.equal(guestLook.ok, true)
+  assert.equal((await emitWithAck(hostSocket, 'property:profile:update', { ready: true })).ok, true)
+  assert.equal((await emitWithAck(guestSocket, 'property:profile:update', { ready: true })).ok, true)
   const rejectedGuestSettings = await emitWithAck(guestSocket, 'property:settings:update', {
-    settings: { ...settings.data, startingCash: 1600, preset: 'custom' },
+    settings: { ...settings.data, mapId: 'south_africa', startingCash: 1600, preset: 'custom' },
   })
   assert.equal(rejectedGuestSettings.ok, false)
   assert.equal(rejectedGuestSettings.error.code, 'HOST_ONLY')
-  const guestSawSettings = waitForEvent(guestSocket, 'property:settings', (value) => value.startingCash === 1600)
+  const guestSawSettings = waitForEvent(guestSocket, 'property:settings', (value) => value.startingCash === 1600 && value.mapId === 'south_africa')
   const updatedSettings = await emitWithAck(hostSocket, 'property:settings:update', {
-    settings: { ...settings.data, startingCash: 1600, preset: 'custom' },
+    settings: { ...settings.data, mapId: 'south_africa', startingCash: 1600, preset: 'custom' },
   })
   assert.equal(updatedSettings.ok, true)
   await guestSawSettings
@@ -124,6 +130,7 @@ try {
   assert.equal(started.ok, true)
   assert.equal(started.data.phase, 'INTRO')
   assert.equal(started.data.players[hostSession.playerId].cash, 1600)
+  assert.equal(started.data.players[guestSession.playerId].avatar, 'fox')
   await guestSawPlaying
 
   const activeState = await waitForEvent(guestSocket, 'property:state', (state) => state.phase === 'PRE_ROLL')

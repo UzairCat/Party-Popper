@@ -1,5 +1,5 @@
 import type { GameId } from './games.js'
-import type { MatchSnapshot, PropertyAction, PropertySettings } from './property-game.js'
+import type { MatchSnapshot, PropertyAction, PropertyAvatar, PropertyColour, PropertySettings, PropertySetupSnapshot } from './property-game.js'
 
 export const ROOM_CODE_LENGTH = 4
 export const ROOM_CODE_CHARACTERS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
@@ -9,37 +9,11 @@ export const MAX_PLAYER_OPTIONS = [4, 6, 8, 10, 12] as const
 export const DISCONNECT_GRACE_MS = 30_000
 export const ROOM_INACTIVITY_MS = 30 * 60 * 1000
 
-export const PLAYER_COLOUR_IDS = [
-  'coral',
-  'blue',
-  'green',
-  'yellow',
-  'purple',
-  'orange',
-  'pink',
-  'cyan',
-] as const
-
-export const PLAYER_AVATAR_IDS = [
-  'robot',
-  'frog',
-  'alien',
-  'cool',
-  'cowboy',
-  'cat',
-  'monkey',
-  'sparkle',
-] as const
-
-export type PlayerColour = (typeof PLAYER_COLOUR_IDS)[number]
-export type PlayerAvatar = (typeof PLAYER_AVATAR_IDS)[number]
 export type RoomStatus = 'WAITING' | 'GAME_SELECT' | 'GAME_SETUP' | 'PLAYING' | 'CLOSED'
 
 export interface Player {
   id: string
   name: string
-  avatar: PlayerAvatar
-  colour: PlayerColour
   isConnected: boolean
 }
 
@@ -68,8 +42,6 @@ export interface SessionCredentials {
 
 export interface PlayerIdentityInput {
   name: string
-  avatar: PlayerAvatar
-  colour: PlayerColour
 }
 
 export interface JoinRoomInput extends PlayerIdentityInput {
@@ -164,6 +136,8 @@ export interface ClientToServerEvents {
   ) => void
   'property:settings:get': (acknowledge: (response: AckResponse<PropertySettings>) => void) => void
   'property:settings:update': (payload: { settings: PropertySettings }, acknowledge: (response: AckResponse<PropertySettings>) => void) => void
+  'property:setup:get': (acknowledge: (response: AckResponse<PropertySetupSnapshot>) => void) => void
+  'property:profile:update': (payload: { avatar?: PropertyAvatar | null; colour?: PropertyColour | null; ready?: boolean }, acknowledge: (response: AckResponse<PropertySetupSnapshot>) => void) => void
   'property:match:get': (acknowledge: (response: AckResponse<MatchSnapshot | null>) => void) => void
   'property:start': (acknowledge: (response: AckResponse<MatchSnapshot>) => void) => void
   'property:action': (payload: PropertyAction, acknowledge: (response: AckResponse<MatchSnapshot | RoomSnapshot>) => void) => void
@@ -176,6 +150,7 @@ export interface ServerToClientEvents {
   'player:kicked': (notice: RoomNotice) => void
   'session:ended': (notice: RoomNotice) => void
   'property:settings': (settings: PropertySettings) => void
+  'property:setup': (setup: PropertySetupSnapshot) => void
   'property:state': (state: MatchSnapshot) => void
 }
 

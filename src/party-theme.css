@@ -132,6 +132,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .identity-preview::before { content: 'YOUR PARTY PASS'; position: absolute; top: -14px; left: 25px; padding: 8px 14px; border: 1px solid var(--ink); background: var(--surface); font-size: .6rem; font-weight: 700; letter-spacing: .1em; transform: rotate(-8deg); }
 .identity-preview::after { content: '✦  ✦  ✦'; margin-top: 26px; padding-top: 16px; width: 100%; border-top: 1px dashed var(--ink); letter-spacing: .4em; font-size: .8rem; }
 .identity-preview__avatar { border: 2px solid var(--ink); border-radius: 28px; box-shadow: 5px 5px 0 var(--ink); }
+.identity-preview__avatar { color:#214d3c; background:#fff9e8; }
+.player-card__avatar,.room-party-strip__avatars>span { font-family:'Bricolage Grotesque',sans-serif; font-weight:900; color:#234938; }
+.room-party-strip__avatars>span { background:#e4eddd; }
+.room-party-strip__avatars>span:nth-child(3n+2) { background:#f8e1ba; }
+.room-party-strip__avatars>span:nth-child(3n+3) { background:#e7ddf5; }
 .identity-preview strong { font-family: 'Bricolage Grotesque', sans-serif; font-weight: 800; }
 .identity-preview > span:last-child { color: var(--ink); }
 .heading-icon { background: var(--yellow); color: var(--ink); }

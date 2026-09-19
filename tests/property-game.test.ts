@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { BOARD, CLASSIC_SETTINGS, type MatchSnapshot } from '../shared/property-game'
+import { BOARD, CLASSIC_SETTINGS, getPropertyBoard, type MatchSnapshot } from '../shared/property-game'
 import type { RoomSnapshot } from '../shared/protocol'
 import { PropertyGameManager } from '../server/games/property-game-manager'
 import { buildingSupply, netWorth, rentFor } from '../server/games/property-rules'
@@ -11,13 +11,20 @@ const guestId = 'guest-id'
 const room: RoomSnapshot = {
   code: 'ABCD', status: 'GAME_SETUP', selectedGameId: 'property_game', hostId,
   players: [
-    { id: hostId, name: 'Host', avatar: 'robot', colour: 'purple', isConnected: true },
-    { id: guestId, name: 'Guest', avatar: 'frog', colour: 'green', isConnected: true },
+    { id: hostId, name: 'Host', isConnected: true },
+    { id: guestId, name: 'Guest', isConnected: true },
   ],
   settings: { maxPlayers: 8, allowLateJoin: false, filterNames: true },
   createdAt: new Date(0).toISOString(), updatedAt: new Date(0).toISOString(),
 }
 const activeRoom = { ...room, status: 'PLAYING' as const }
+
+function readyProfiles(manager: PropertyGameManager) {
+  manager.setProfile(room, hostId, { avatar: 'robot', colour: 'purple' })
+  manager.setProfile(room, hostId, { ready: true })
+  manager.setProfile(room, guestId, { avatar: 'frog', colour: 'green' })
+  manager.setProfile(room, guestId, { ready: true })
+}
 
 function harness(rolls: number[]) {
   let time = 1_000_000
@@ -27,7 +34,7 @@ function harness(rolls: number[]) {
     manager,
     advance(ms: number) { time += ms; manager.tick(activeRoom) },
     advanceWith(ms: number, currentRoom: RoomSnapshot) { time += ms; manager.tick(currentRoom) },
-    begin() { manager.start(room, hostId); time += 4500; manager.tick(activeRoom) },
+    begin() { readyProfiles(manager); manager.start(room, hostId); time += 4500; manager.tick(activeRoom) },
   }
 }
 
@@ -49,6 +56,32 @@ describe('Own It! server rules', () => {
     expect(() => manager.setSettings(room, guestId, CLASSIC_SETTINGS)).toThrow(RoomError)
     expect(() => manager.setSettings(room, hostId, { ...CLASSIC_SETTINGS, startingCash: -1 })).toThrow(RoomError)
     expect(manager.setSettings(room, hostId, { ...CLASSIC_SETTINGS, startingCash: 2000, preset: 'custom' }).startingCash).toBe(2000)
+  })
+
+  it('requires each player to choose an Own It! look and ready up', () => {
+    const { manager } = harness([6, 6, 1, 1])
+    expect(() => manager.start(room, hostId)).toThrow(/Every player must choose/)
+    expect(() => manager.setProfile(room, hostId, { ready: true })).toThrow(/Choose both/)
+    manager.setProfile(room, hostId, { avatar: 'robot', colour: 'purple' })
+    manager.setProfile(room, hostId, { ready: true })
+    manager.setProfile(room, guestId, { avatar: 'fox', colour: 'teal' })
+    expect(() => manager.start(room, hostId)).toThrow(/Every player must choose/)
+    manager.setProfile(room, guestId, { ready: true })
+    const started = manager.start(room, hostId)
+    expect(started.players[guestId]).toMatchObject({ avatar: 'fox', colour: 'teal' })
+    expect(manager.setProfile(room, guestId, { colour: 'gold' }).profiles[guestId].ready).toBe(false)
+  })
+
+  it('uses the selected South Africa map for movement and property names', () => {
+    const { manager, advance } = harness([6, 6, 1, 1, 1, 2])
+    readyProfiles(manager)
+    manager.setSettings(room, hostId, { ...CLASSIC_SETTINGS, mapId: 'south_africa', preset: 'custom' })
+    manager.start(room, hostId)
+    advance(4500)
+    const result = manager.act(activeRoom, hostId, { type: 'roll' })
+    expect(getPropertyBoard('south_africa')[3].name).toBe('V&A Waterfront')
+    expect(result.log.at(-1)?.text).toContain('V&A Waterfront')
+    expect(result.settings.mapId).toBe('south_africa')
   })
 
   it('rolls on the server, buys a property, collects rent, and enforces turn ownership', () => {
