@@ -1,5 +1,6 @@
 import { io, type Socket } from 'socket.io-client'
 import type { GameId } from '../../shared/games'
+import type { MatchSnapshot, PropertyAction, PropertySettings } from '../../shared/property-game'
 import type {
   AckResponse,
   ClientToServerEvents,
@@ -153,4 +154,24 @@ export function returnToLobby() {
   return waitForAck<RoomSnapshot>((acknowledge) =>
     socket.emit('game:return-to-lobby', acknowledge),
   )
+}
+
+export function getPropertySettings() {
+  return waitForAck<PropertySettings>((acknowledge) => socket.emit('property:settings:get', acknowledge))
+}
+
+export function updatePropertySettings(settings: PropertySettings) {
+  return waitForAck<PropertySettings>((acknowledge) => socket.emit('property:settings:update', { settings }, acknowledge))
+}
+
+export function getPropertyMatch() {
+  return waitForAck<MatchSnapshot | null>((acknowledge) => socket.emit('property:match:get', acknowledge))
+}
+
+export function startPropertyMatch() {
+  return waitForAck<MatchSnapshot>((acknowledge) => socket.emit('property:start', acknowledge))
+}
+
+export function propertyAction(action: PropertyAction) {
+  return waitForAck<MatchSnapshot | RoomSnapshot>((acknowledge) => socket.emit('property:action', action, acknowledge))
 }

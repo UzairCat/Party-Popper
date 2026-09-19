@@ -39,11 +39,17 @@ The Node server serves the built single-page app and exposes `GET /health`. It r
 
 No additional Railway service, database, or OpenAI API key is needed. Railway injects `PORT` automatically. Keep one replica: rooms live in process memory and reset on restart/redeploy. Add persistence and the Socket.IO Redis adapter before horizontal scaling.
 
-If the retired quiz was previously configured, remove `OPENAI_API_KEY` and `OPENAI_QUIZ_MODEL` from Railway. They are no longer read by the application.
+If the retired quiz was previously configured, remove `OPENAI_API_KEY` and `OPENAI_QUIZ_MODEL` from Railway. They are no longer read by the application. The OpenAI API key created for that quiz was set to be valid for 150 days; check its expiry if it is ever reused for another feature.
 
 ## Game-pack architecture
 
-The Party Popper core owns rooms, players, host controls, connections, and game selection. Individual game packs will own their own player requirements, ready checks, settings, rules, state, and scoring. No game packs are currently registered, so the game-selection screen intentionally shows a coming-soon state.
+The Party Popper core owns rooms, players, host controls, connections, and game selection. Own It! is the first game pack and owns its own menu, 40-space board data, match settings, card decks, turns, economy, and winner state. There is no shared lobby ready-up system.
+
+## Own It!
+
+Create a room with 2–8 connected players, choose **Own It!**, adjust the preset or advanced rules, and start. The highest opening dice roll leads. Roll and move, buy or auction property, collect rent, complete colour sets, build evenly (unless the host changes the rule), trade, mortgage, and settle debt. The last solvent player wins; limited matches use net worth: cash + full purchase value of unmortgaged property + mortgage value of mortgaged property + full cost of existing buildings.
+
+The server decides rolls, payments, ownership, timers, trades, auctions, bankruptcy, and turn order. Players can refresh or reconnect to restore the current match. Disconnected players remain in the match; after 30 seconds their turns are automated, and an unattended debt is liquidated before bankruptcy. The host can pause or end the match from the game menu. The current game is held in the server process, so a Railway restart or redeploy will end an in-progress match; save/resume across deployments is not part of this version. Keep one Railway replica.
 
 ## Current scope
 
@@ -52,13 +58,14 @@ The Party Popper core owns rooms, players, host controls, connections, and game 
 - Live Socket.IO player, host, and settings synchronization
 - Host-validated kick, transfer-host, close-room, and game-selection actions
 - Synchronized party-lobby and game-selection phases
-- Empty game library ready for independently registered game packs
-- Ready checks deliberately belong to individual games rather than the shared lobby
+- Own It! game card, dedicated setup menu and configurable presets/advanced rules
+- Server-authoritative Own It! board, auctions, buildings, cards, mortgages, trades, debt, jail, time/round limits, winner and post-game navigation
+- No shared ready-up state; game packs control their own start requirements
 - Private browser session tokens with a 30-second refresh/reconnect grace period
 - Session recovery on refresh and automatic host migration after the reconnect grace period
 - Production SPA routing and Railway health check
 
-Game packs, accounts, permanent player statistics, persistence, and horizontal scaling remain future work.
+Accounts, permanent player statistics, persistence, and horizontal scaling remain future work.
 
 ## Multiplayer smoke test
 
@@ -68,4 +75,4 @@ With the production server running locally, execute:
 npm run verify:multiplayer
 ```
 
-This verifies room creation, joining, game-library navigation, reconnect behavior, host transfer, and room closure through real sockets.
+This verifies room creation, joining, Own It! setup synchronization, a shared roll, reconnecting into the running match, host transfer, and room closure through real sockets.

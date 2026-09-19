@@ -166,6 +166,24 @@ describe('RoomManager', () => {
     expect(manager.removeDisconnectedPlayer(host.room.code, host.session.playerId)).toBeNull()
   })
 
+  it('retains disconnected match players and migrates the host after the grace period', () => {
+    const { manager, advance } = createHarness()
+    const host = manager.createRoom(HOST, 'host-connection')
+    const guest = manager.joinRoom({ ...GUEST, roomCode: host.room.code }, 'guest-connection')
+    manager.openGameSelection(socketSession(host.session), 'host-connection')
+    manager.selectGame(socketSession(host.session), 'host-connection', 'property_game')
+    manager.startSelectedGame(socketSession(host.session), 'host-connection')
+    manager.disconnect(socketSession(host.session), 'host-connection')
+    advance(30_000)
+    const retained = manager.removeDisconnectedPlayer(host.room.code, host.session.playerId)
+    expect(retained?.retained).toBe(true)
+    expect(retained?.room?.players).toHaveLength(2)
+    expect(retained?.room?.hostId).toBe(guest.session.playerId)
+    const restored = manager.reconnect(host.session, 'returned-host-connection')
+    expect(restored.players.find((player) => player.id === host.session.playerId)?.isConnected).toBe(true)
+    expect(restored.status).toBe('PLAYING')
+  })
+
   it('rejects a forged reconnection token', () => {
     const { manager } = createHarness()
     const host = manager.createRoom(HOST, 'host-connection')

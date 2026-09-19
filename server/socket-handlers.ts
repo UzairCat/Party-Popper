@@ -11,6 +11,7 @@ import {
   type SocketSession,
 } from '../shared/protocol.js'
 import { RoomError, RoomManager } from './room-manager.js'
+import { PropertyGameManager } from './games/property-game-manager.js'
 
 type LobbyServer = Server<
   ClientToServerEvents,
@@ -80,6 +81,9 @@ export function registerSocketHandlers(
   roomManager: RoomManager,
 ) {
   const disconnectTimers = new Map<string, NodeJS.Timeout>()
+  const propertyGames = new PropertyGameManager({
+    onUpdate: (roomCode, state) => io.to(roomChannel(roomCode)).emit('property:state', state),
+  })
 
   const clearDisconnectTimer = (session: SocketSession) => {
     const key = playerKey(session)
@@ -185,6 +189,11 @@ export function registerSocketHandlers(
       clearDisconnectTimer(socket.data.session)
       await socket.join(roomChannel(room.code))
       broadcastState(room)
+      if (room.selectedGameId === 'property_game') {
+        socket.emit('property:settings', propertyGames.getSettings(room.code))
+        const game = propertyGames.getMatch(room.code)
+        if (game) socket.emit('property:state', game)
+      }
 
       if (!wasAlreadyBound) {
         const player = room.players.find((candidate) => candidate.id === payload.playerId)
@@ -258,6 +267,8 @@ export function registerSocketHandlers(
       if (!result || !session) return
 
       clearDisconnectTimer(session)
+      if (result.roomClosed) propertyGames.clear(session.roomCode)
+      else propertyGames.playerLeft(session.roomCode, session.playerId)
       removeConnectionsFromRoom(result.removedConnectionIds, session.roomCode, {
         type: 'session:ended',
         message: 'You left the room.',
@@ -285,6 +296,8 @@ export function registerSocketHandlers(
       )
       if (!result || !session) return
 
+      propertyGames.clear(session.roomCode)
+
       removeConnectionsFromRoom(result.connectionIds, session.roomCode, {
         type: 'room:closed',
         message: 'The host closed the room.',
@@ -305,23 +318,96 @@ export function registerSocketHandlers(
       if (!room) return
 
       broadcastState(room)
+      if (room.selectedGameId === 'property_game') io.to(roomChannel(room.code)).emit('property:settings', propertyGames.getSettings(room.code))
       io.to(roomChannel(room.code)).emit('room:notice', {
         message: 'The host selected a game.',
       })
     })
 
     socket.on('game:back', (acknowledge) => {
+      const session = socket.data.session
       const room = respond(acknowledge, () =>
         roomManager.returnToGameSelection(requireSession(socket), socket.id),
       )
+      if (room && session) propertyGames.clear(session.roomCode)
       if (room) broadcastState(room)
     })
 
     socket.on('game:return-to-lobby', (acknowledge) => {
+      const session = socket.data.session
       const room = respond(acknowledge, () =>
         roomManager.returnToLobby(requireSession(socket), socket.id),
       )
+      if (room && session) propertyGames.clear(session.roomCode)
       if (room) broadcastState(room)
+    })
+
+    socket.on('property:settings:get', (acknowledge) => {
+      respond(acknowledge, () => {
+        const room = roomManager.getAuthorizedRoom(requireSession(socket), socket.id)
+        if (room.selectedGameId !== 'property_game') throw new RoomError('INVALID_GAME_STATE', 'Own It! is not selected.')
+        return propertyGames.getSettings(room.code)
+      })
+    })
+
+    socket.on('property:settings:update', (payload, acknowledge) => {
+      const settings = respond(acknowledge, () => {
+        const session = requireSession(socket)
+        const room = roomManager.getAuthorizedRoom(session, socket.id)
+        return propertyGames.setSettings(room, session.playerId, payload?.settings)
+      })
+      if (settings && socket.data.session) io.to(roomChannel(socket.data.session.roomCode)).emit('property:settings', settings)
+    })
+
+    socket.on('property:match:get', (acknowledge) => {
+      respond(acknowledge, () => {
+        const room = roomManager.getAuthorizedRoom(requireSession(socket), socket.id)
+        return room.selectedGameId === 'property_game' ? propertyGames.getMatch(room.code) : null
+      })
+    })
+
+    socket.on('property:start', (acknowledge) => {
+      const game = respond(acknowledge, () => {
+        const session = requireSession(socket)
+        const room = roomManager.getAuthorizedRoom(session, socket.id)
+        const match = propertyGames.start(room, session.playerId)
+        const startedRoom = roomManager.startSelectedGame(session, socket.id)
+        broadcastState(startedRoom)
+        return match
+      })
+      if (game) socket.emit('property:state', game)
+    })
+
+    socket.on('property:action', (payload, acknowledge) => {
+      const result = respond(acknowledge, () => {
+        const session = requireSession(socket)
+        const room = roomManager.getAuthorizedRoom(session, socket.id)
+        if (payload?.type === 'end_game') {
+          if (room.hostId !== session.playerId) throw new RoomError('HOST_ONLY', 'Only the host can end the match.')
+          const nextRoom = roomManager.finishSelectedGame(session, socket.id, 'GAME_SETUP')
+          propertyGames.stopMatch(room.code)
+          broadcastState(nextRoom)
+          io.to(roomChannel(room.code)).emit('property:settings', propertyGames.getSettings(room.code))
+          return nextRoom
+        }
+        if (payload?.type === 'play_again') {
+          return propertyGames.start(room, session.playerId)
+        }
+        if (payload?.type === 'to_settings' || payload?.type === 'change_game') {
+          const match = propertyGames.getMatch(room.code)
+          if (room.hostId !== session.playerId) throw new RoomError('HOST_ONLY', 'Only the host can change games.')
+          if (!match || match.phase !== 'FINISHED') throw new RoomError('INVALID_GAME_STATE', 'Finish the match before leaving its game menu.')
+          const destination = payload.type === 'to_settings' ? 'GAME_SETUP' : 'GAME_SELECT'
+          const nextRoom = roomManager.finishSelectedGame(session, socket.id, destination)
+          if (destination === 'GAME_SELECT') propertyGames.clear(room.code)
+          else propertyGames.stopMatch(room.code)
+          broadcastState(nextRoom)
+          if (destination === 'GAME_SETUP') io.to(roomChannel(room.code)).emit('property:settings', propertyGames.getSettings(room.code))
+          return nextRoom
+        }
+        return propertyGames.act(room, session.playerId, payload)
+      })
+      if (result && 'phase' in result) socket.emit('property:state', result)
     })
 
     socket.on('disconnect', () => {
@@ -349,7 +435,7 @@ export function registerSocketHandlers(
 
         broadcastState(removal.room)
         io.to(roomChannel(session.roomCode)).emit('room:notice', {
-          message: `${removal.removedName} left the room.`,
+          message: removal.retained ? `${removal.removedName} is away; automatic turns will continue.` : `${removal.removedName} left the room.`,
         })
         if (removal.newHostName) {
           io.to(roomChannel(session.roomCode)).emit('room:notice', {
@@ -364,6 +450,7 @@ export function registerSocketHandlers(
 
   const cleanupTimer = setInterval(() => {
     for (const expiredRoom of roomManager.expireInactiveRooms()) {
+      propertyGames.clear(expiredRoom.code)
       removeConnectionsFromRoom(expiredRoom.connectionIds, expiredRoom.code, {
         type: 'room:closed',
         message: 'This room closed after being inactive for 30 minutes.',
@@ -371,8 +458,17 @@ export function registerSocketHandlers(
     }
   }, 60_000)
   cleanupTimer.unref()
+  const gameTimer = setInterval(() => {
+    for (const [roomCode] of io.sockets.adapter.rooms) {
+      if (!roomCode.startsWith('room:')) continue
+      const room = roomManager.getRoomByCode(roomCode.slice(5))
+      if (room?.status === 'PLAYING' && room.selectedGameId === 'property_game') propertyGames.tick(room)
+    }
+  }, 250)
+  gameTimer.unref()
   return () => {
     clearInterval(cleanupTimer)
+    clearInterval(gameTimer)
     for (const timer of disconnectTimers.values()) clearTimeout(timer)
     disconnectTimers.clear()
   }

@@ -7,6 +7,8 @@ import { PlayerCard } from '../components/player/PlayerCard'
 import { RoomCodeCard } from '../components/room/RoomCodeCard'
 import { SettingsPanel } from '../components/room/SettingsPanel'
 import { GameSelectionScreen } from '../games/GameSelectionScreen'
+import { OwnItSetup } from '../games/property/OwnItSetup'
+import { OwnItMatch } from '../games/property/OwnItMatch'
 import {
   closeRoom as closeRoomOnServer,
   disconnectSocket,
@@ -320,9 +322,11 @@ export function LobbyPage() {
     <Modal
       title="Leave this room?"
       description={
-        isCurrentPlayerHost
-          ? 'You’re the host. Host control will transfer to another player.'
-          : 'You can rejoin later with the same room code.'
+        room.status === 'PLAYING'
+          ? `Leaving forfeits your place in this match.${isCurrentPlayerHost ? ' Host control will transfer to another player.' : ''} You can join this room again after the match ends.`
+          : isCurrentPlayerHost
+            ? 'You’re the host. Host control will transfer to another player.'
+            : 'You can rejoin later with the same room code.'
       }
       confirmLabel="Leave room"
       confirmVariant="danger"
@@ -346,6 +350,14 @@ export function LobbyPage() {
         {toast ? <Toast message={toast} /> : null}
       </>
     )
+  }
+
+  if (room.status === 'GAME_SETUP' && room.selectedGameId === 'property_game') {
+    return <><OwnItSetup room={room} playerId={currentPlayer.id} onRoom={setRoom} onLeave={() => setLeaveDialogOpen(true)} notify={notify} />{leaveDialog}{toast ? <Toast message={toast} /> : null}</>
+  }
+
+  if (room.status === 'PLAYING' && room.selectedGameId === 'property_game') {
+    return <><OwnItMatch room={room} playerId={currentPlayer.id} notify={notify} />{leaveDialog}{toast ? <Toast message={toast} /> : null}</>
   }
 
   const lobbyMessage =

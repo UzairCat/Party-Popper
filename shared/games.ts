@@ -11,8 +11,18 @@ export interface GameDefinition {
   estimatedDuration: string
 }
 
-// Games are registered here as their pack modes are built.
-export const GAME_CATALOG: readonly GameDefinition[] = []
+export const GAME_CATALOG: readonly GameDefinition[] = [
+  {
+    id: 'property_game',
+    name: 'Own It!',
+    shortName: 'Own It!',
+    description: 'Roll, buy, build and bargain your way to the last fortune standing.',
+    type: 'Property strategy',
+    minimumPlayers: 2,
+    maximumPlayers: 8,
+    estimatedDuration: '30–120+ min',
+  },
+]
 
 export function isGameId(value: unknown): value is GameId {
   return typeof value === 'string' && GAME_CATALOG.some((game) => game.id === value)

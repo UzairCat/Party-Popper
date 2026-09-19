@@ -3,6 +3,7 @@ import { isGameId, type GameId } from '../shared/games.js'
 import {
   DISPLAY_NAME_MAX_LENGTH,
   DISPLAY_NAME_MIN_LENGTH,
+  DISCONNECT_GRACE_MS,
   MAX_PLAYER_OPTIONS,
   PLAYER_AVATAR_IDS,
   PLAYER_COLOUR_IDS,
@@ -26,6 +27,7 @@ interface StoredPlayer extends Player {
   sessionToken: string
   connectionIds: Set<string>
   joinedAt: number
+  disconnectedAt: number | null
 }
 
 interface StoredRoom {
@@ -46,6 +48,7 @@ export interface PlayerRemovalResult {
   removedName: string
   removedConnectionIds: string[]
   newHostName?: string
+  retained?: boolean
 }
 
 export interface DisconnectResult {
@@ -186,6 +189,11 @@ export class RoomManager {
 
     player.connectionIds.add(connectionId)
     player.isConnected = true
+    player.disconnectedAt = null
+    if (room.status === 'PLAYING' && room.hostId !== player.id) {
+      const host = room.players.get(room.hostId)
+      if (host && !host.isConnected && host.disconnectedAt !== null && this.now() - host.disconnectedAt >= DISCONNECT_GRACE_MS) room.hostId = player.id
+    }
     this.touch(room)
     return this.toSnapshot(room)
   }
@@ -221,6 +229,10 @@ export class RoomManager {
     playerId: string,
   ): PlayerRemovalResult {
     const { room } = this.authorizeHost(session, connectionId)
+
+    if (room.status === 'PLAYING') {
+      throw new RoomError('INVALID_GAME_STATE', 'Players cannot be removed during a match.')
+    }
 
     if (typeof playerId !== 'string') {
       throw new RoomError('INVALID_INPUT', 'Choose a valid player.')
@@ -342,6 +354,36 @@ export class RoomManager {
     return this.toSnapshot(room)
   }
 
+  getAuthorizedRoom(session: SocketSession, connectionId: string): RoomSnapshot {
+    return this.toSnapshot(this.authorize(session, connectionId).room)
+  }
+
+  getRoomByCode(roomCode: string): RoomSnapshot | null {
+    const room = this.rooms.get(roomCode)
+    return room ? this.toSnapshot(room) : null
+  }
+
+  startSelectedGame(session: SocketSession, connectionId: string): RoomSnapshot {
+    const { room } = this.authorizeHost(session, connectionId)
+    if (room.status !== 'GAME_SETUP' || room.selectedGameId !== 'property_game') {
+      throw new RoomError('INVALID_GAME_STATE', 'Select Own It! before starting.')
+    }
+    room.status = 'PLAYING'
+    this.touch(room)
+    return this.toSnapshot(room)
+  }
+
+  finishSelectedGame(session: SocketSession, connectionId: string, destination: 'GAME_SETUP' | 'GAME_SELECT'): RoomSnapshot {
+    const { room } = this.authorizeHost(session, connectionId)
+    if (room.status !== 'PLAYING' || room.selectedGameId !== 'property_game') {
+      throw new RoomError('INVALID_GAME_STATE', 'There is no Own It! match to leave.')
+    }
+    room.status = destination
+    room.selectedGameId = destination === 'GAME_SELECT' ? null : 'property_game'
+    this.touch(room)
+    return this.toSnapshot(room)
+  }
+
   disconnect(
     session: SocketSession,
     connectionId: string,
@@ -358,6 +400,7 @@ export class RoomManager {
 
     if (becameDisconnected) {
       player.isConnected = false
+      player.disconnectedAt = this.now()
       this.touch(room)
     }
 
@@ -376,6 +419,19 @@ export class RoomManager {
       return null
     }
 
+    if (room.status === 'PLAYING') {
+      let newHostName: string | undefined
+      if (room.hostId === playerId) {
+        const nextHost = [...room.players.values()].find((candidate) => candidate.isConnected)
+        if (nextHost) {
+          room.hostId = nextHost.id
+          newHostName = nextHost.name
+        }
+      }
+      this.touch(room)
+      return { room: this.toSnapshot(room), roomClosed: false, removedName: player.name, removedConnectionIds: [], newHostName, retained: true }
+    }
+
     return this.removePlayer(room, playerId)
   }
 
@@ -384,6 +440,7 @@ export class RoomManager {
     const expiredRooms: ExpiredRoom[] = []
 
     for (const room of this.rooms.values()) {
+      if (room.status === 'PLAYING' && [...room.players.values()].some((player) => player.isConnected)) continue
       if (room.updatedAt > expiryBoundary) continue
 
       expiredRooms.push({
@@ -516,6 +573,7 @@ export class RoomManager {
       sessionToken: this.createToken(),
       connectionIds: new Set([connectionId]),
       joinedAt,
+      disconnectedAt: null,
     }
   }
 

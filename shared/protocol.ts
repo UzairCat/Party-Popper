@@ -1,4 +1,5 @@
 import type { GameId } from './games.js'
+import type { MatchSnapshot, PropertyAction, PropertySettings } from './property-game.js'
 
 export const ROOM_CODE_LENGTH = 4
 export const ROOM_CODE_CHARACTERS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
@@ -161,6 +162,11 @@ export interface ClientToServerEvents {
   'game:return-to-lobby': (
     acknowledge: (response: AckResponse<RoomSnapshot>) => void,
   ) => void
+  'property:settings:get': (acknowledge: (response: AckResponse<PropertySettings>) => void) => void
+  'property:settings:update': (payload: { settings: PropertySettings }, acknowledge: (response: AckResponse<PropertySettings>) => void) => void
+  'property:match:get': (acknowledge: (response: AckResponse<MatchSnapshot | null>) => void) => void
+  'property:start': (acknowledge: (response: AckResponse<MatchSnapshot>) => void) => void
+  'property:action': (payload: PropertyAction, acknowledge: (response: AckResponse<MatchSnapshot | RoomSnapshot>) => void) => void
 }
 
 export interface ServerToClientEvents {
@@ -169,6 +175,8 @@ export interface ServerToClientEvents {
   'room:closed': (notice: RoomNotice) => void
   'player:kicked': (notice: RoomNotice) => void
   'session:ended': (notice: RoomNotice) => void
+  'property:settings': (settings: PropertySettings) => void
+  'property:state': (state: MatchSnapshot) => void
 }
 
 export type InterServerEvents = Record<string, never>

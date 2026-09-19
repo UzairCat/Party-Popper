@@ -99,6 +99,46 @@ try {
   assert.equal(retiredQuiz.ok, false)
   assert.equal(retiredQuiz.error.code, 'INVALID_INPUT')
 
+  const guestSawSetup = waitForEvent(guestSocket, 'room:state', (room) => room.status === 'GAME_SETUP')
+  const selected = await emitWithAck(hostSocket, 'game:select', { gameId: 'property_game' })
+  assert.equal(selected.ok, true)
+  await guestSawSetup
+
+  const settings = await emitWithAck(hostSocket, 'property:settings:get')
+  assert.equal(settings.ok, true)
+  assert.equal(settings.data.startingCash, 1500)
+  const rejectedGuestSettings = await emitWithAck(guestSocket, 'property:settings:update', {
+    settings: { ...settings.data, startingCash: 1600, preset: 'custom' },
+  })
+  assert.equal(rejectedGuestSettings.ok, false)
+  assert.equal(rejectedGuestSettings.error.code, 'HOST_ONLY')
+  const guestSawSettings = waitForEvent(guestSocket, 'property:settings', (value) => value.startingCash === 1600)
+  const updatedSettings = await emitWithAck(hostSocket, 'property:settings:update', {
+    settings: { ...settings.data, startingCash: 1600, preset: 'custom' },
+  })
+  assert.equal(updatedSettings.ok, true)
+  await guestSawSettings
+
+  const guestSawPlaying = waitForEvent(guestSocket, 'room:state', (room) => room.status === 'PLAYING')
+  const started = await emitWithAck(hostSocket, 'property:start')
+  assert.equal(started.ok, true)
+  assert.equal(started.data.phase, 'INTRO')
+  assert.equal(started.data.players[hostSession.playerId].cash, 1600)
+  await guestSawPlaying
+
+  const activeState = await waitForEvent(guestSocket, 'property:state', (state) => state.phase === 'PRE_ROLL')
+  const activeSocket = activeState.currentPlayerId === hostSession.playerId ? hostSocket : guestSocket
+  const otherSocket = activeSocket === hostSocket ? guestSocket : hostSocket
+  const otherSawRoll = waitForEvent(otherSocket, 'property:state', (state) => state.dice !== null)
+  const rolled = await emitWithAck(activeSocket, 'property:action', { type: 'roll' })
+  assert.equal(rolled.ok, true)
+  assert.ok(rolled.data.dice)
+  await otherSawRoll
+
+  const matchBeforeReconnect = await emitWithAck(guestSocket, 'property:match:get')
+  assert.equal(matchBeforeReconnect.ok, true)
+  assert.equal(matchBeforeReconnect.data.players[guestSession.playerId].cash, rolled.data.players[guestSession.playerId].cash)
+
   const hostSawDisconnect = waitForEvent(
     hostSocket,
     'room:state',
@@ -120,8 +160,20 @@ try {
   )
   assert.equal(reconnected.ok, true)
   assert.equal(reconnected.data.players.length, 2)
-  assert.equal(reconnected.data.status, 'GAME_SELECT')
+  assert.equal(reconnected.data.status, 'PLAYING')
   await hostSawReconnect
+
+  const resumedMatch = await emitWithAck(reconnectedGuestSocket, 'property:match:get')
+  assert.equal(resumedMatch.ok, true)
+  assert.equal(resumedMatch.data.players[guestSession.playerId].position, matchBeforeReconnect.data.players[guestSession.playerId].position)
+
+  const guestSawReturnToSetup = waitForEvent(reconnectedGuestSocket, 'room:state', (room) => room.status === 'GAME_SETUP')
+  const ended = await emitWithAck(hostSocket, 'property:action', { type: 'end_game' })
+  assert.equal(ended.ok, true)
+  await guestSawReturnToSetup
+  const backedOut = await emitWithAck(hostSocket, 'game:back')
+  assert.equal(backedOut.ok, true)
+  assert.equal(backedOut.data.status, 'GAME_SELECT')
 
   const transferred = await emitWithAck(hostSocket, 'host:transfer', {
     playerId: guestSession.playerId,

@@ -85,11 +85,9 @@ export function GameSelectionScreen({
       {GAME_CATALOG.length ? (
         <div className="game-card-grid">
           {GAME_CATALOG.map((game, index) => (
-            <article className="game-card" key={game.id}>
+            <article className={`game-card ${game.id === 'property_game' ? 'game-card--own-it' : ''}`} key={game.id}>
               <div className="game-card__art" aria-hidden="true">
-                <span>{String(index + 1).padStart(2, '0')}</span>
-                <strong>{game.shortName.slice(0, 1)}</strong>
-                <i>✦</i>
+                {game.id === 'property_game' ? <div className="oi-library-art"><span>01 / THE ESTATE</span><div className="oi-library-art__board"><i>⌂</i><i>$</i><i>⚄</i><strong>OWN<br />IT!</strong><i>★</i><i>▰</i><i>♛</i></div><small>EVERY SQUARE IS AN OPPORTUNITY.</small></div> : <><span>{String(index + 1).padStart(2, '0')}</span><strong>{game.shortName.slice(0, 1)}</strong><i>✦</i></>}
               </div>
               <div className="game-card__body">
                 <span className="game-card__type">{game.type}</span>
